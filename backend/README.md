@@ -19,6 +19,37 @@ exigir mudança em nenhuma view.
 | [docs/05-arquitetura.md](docs/05-arquitetura.md) | Stack, serviços, dados, observabilidade |
 | [docs/06-roadmap.md](docs/06-roadmap.md) | Ordem de construção alinhada às fases do app |
 
+## Como rodar
+
+```bash
+docker compose up -d db          # Postgres 16
+mvn test                         # testes de domínio (não precisam de banco)
+mvn spring-boot:run              # aplicação em http://localhost:8080/docs
+```
+
+### Verificação das invariantes do razão
+
+As invariantes I-1 (soma zero), I-2 (duas pernas em contas distintas),
+append-only e valor positivo são garantidas **no banco**, não só em Java.
+Para conferir:
+
+```bash
+docker compose up -d db
+docker compose exec -T db psql -U aurora -d aurora \
+  < src/main/resources/db/migration/V1__ledger_core.sql
+docker compose exec -T db psql -U aurora -d aurora < scripts/verify-ledger.sql
+```
+
+Os blocos T3 a T7 **devem** falhar com erro — é isso que prova que a
+garantia existe. T2 deve mostrar 6200.00 e T8 deve mostrar 0.00.
+
+> **Nota sobre Testcontainers.** Existe um `LedgerPersistenceTest` escrito,
+> mas ele não roda neste ambiente: o Docker Desktop 29 exige API >= 1.44 e
+> o cliente docker-java empacotado responde HTTP 400 vazio, que o
+> Testcontainers reporta como "Could not find a valid Docker environment".
+> Upgrade para Testcontainers 1.21.3 não resolveu. Enquanto isso, o script
+> acima cobre as mesmas garantias contra um Postgres real.
+
 ## Princípios que atravessam tudo
 
 1. **O ledger é a fonte da verdade.** Saldo não é uma coluna que se
