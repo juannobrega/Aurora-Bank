@@ -13,6 +13,14 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+aurora:
+  crypto:
+    # AES-256 em Base64 (32 bytes). Cifra o template biométrico em repouso.
+    # Esta é uma chave de DESENVOLVIMENTO: em qualquer uso sério, injete por
+    # variável de ambiente e nunca versione. Gere outra com
+    # TemplateCipher.generateKey().
+    template-key: ${AURORA_TEMPLATE_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+
 server:
   port: 8080
 
