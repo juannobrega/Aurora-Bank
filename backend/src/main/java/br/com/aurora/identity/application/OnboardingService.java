@@ -24,6 +24,28 @@ import java.util.UUID;
  * <p>A conta nasce em {@link UserStatus#PENDING_KYC} e só vira
  * {@code ACTIVE} depois que o rosto é cadastrado com prova de vida
  * aprovada — antes disso não movimenta dinheiro.
+ *
+ * <h2>Limite de confiança desta implementação</h2>
+ *
+ * O template facial e o resultado da prova de vida chegam prontos do
+ * aplicativo, e o servidor <b>acredita neles</b>. Quem controlar o
+ * cliente pode enviar {@code livenessPassed = true} com um template
+ * arbitrário e passar.
+ *
+ * <p>Isso é adequado para um ambiente de estudo, mas não para produção.
+ * Um banco real resolve de uma destas formas:
+ *
+ * <ul>
+ *   <li>o servidor recebe a imagem e executa detecção de vida e extração
+ *       do template no back-end, onde o cliente não alcança;</li>
+ *   <li>o app usa um SDK de liveness certificado que assina o resultado,
+ *       e o servidor verifica a assinatura;</li>
+ *   <li>a captura é atestada pelo hardware (App Attest no iOS), provando
+ *       que veio de uma instalação legítima e não adulterada.</li>
+ * </ul>
+ *
+ * <p>Enquanto isso não existir, a barreira real contra fraude aqui é o
+ * PIN, não o rosto.
  */
 @Service
 public class OnboardingService {

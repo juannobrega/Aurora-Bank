@@ -78,6 +78,10 @@ public interface BankingRepository {
 
     record ContactRow(UUID id, String name, String keyValue, String bank) {}
 
+    // Pagamentos
+    boolean isBoletoPaid(String digitableLine);
+    void recordBoletoPayment(String digitableLine, UUID transactionId);
+
     // Notificações
     void notify(UUID userId, String kind, String title, String message);
     List<NotificationRow> listNotifications(UUID userId);

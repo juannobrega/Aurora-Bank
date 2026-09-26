@@ -463,6 +463,23 @@ public class JdbcBankingRepository implements BankingRepository {
                     rs.getString("name"), rs.getString("key_value"), rs.getString("bank")));
     }
 
+    // --------------------------------------------------------- pagamentos
+
+    @Override
+    public boolean isBoletoPaid(String digitableLine) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM boleto_payments WHERE digitable_line = :line)
+            """, Map.of("line", digitableLine), Boolean.class));
+    }
+
+    @Override
+    public void recordBoletoPayment(String digitableLine, UUID transactionId) {
+        jdbc.update("""
+            INSERT INTO boleto_payments (digitable_line, transaction_id)
+            VALUES (:line, :tx)
+            """, Map.of("line", digitableLine, "tx", transactionId));
+    }
+
     // -------------------------------------------------------- notificações
 
     @Override

@@ -57,6 +57,18 @@ public enum ErrorCode {
     SESSAO_EXPIRADA(HttpStatus.UNAUTHORIZED,
         "Sua sessão expirou. Entre novamente."),
 
+    // Pagamentos
+    BOLETO_INVALIDO(HttpStatus.BAD_REQUEST,
+        "Linha digitável inválida. Confira os números."),
+    BOLETO_VENCIDO(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Este boleto está vencido e não pode ser pago pelo app."),
+    BOLETO_JA_PAGO(HttpStatus.CONFLICT,
+        "Este boleto já foi pago."),
+    TELEFONE_INVALIDO(HttpStatus.BAD_REQUEST,
+        "Número de celular inválido. Informe DDD e número."),
+    VALOR_RECARGA_INVALIDO(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Valor de recarga não disponível para esta operadora."),
+
     // Idempotência
     IDEMPOTENCIA_EM_ANDAMENTO(HttpStatus.CONFLICT,
         "Uma requisição com esta chave ainda está em processamento."),
