@@ -41,6 +41,19 @@ Testes de domínio não precisam de banco:
 mvn test
 ```
 
+### Teste de ponta a ponta
+
+Com a stack no ar, `scripts/e2e.sh` percorre a API inteira: cria conta,
+valida rosto, entra por PIN e por biometria, tenta entrar como impostor,
+contrata empréstimo, envia Pix, usa cofrinho, investe, compra no cartão,
+paga fatura e parcela, e confere que o aparelho continua vinculado após
+o logout.
+
+```bash
+docker compose up -d --build
+./scripts/e2e.sh
+```
+
 ### Verificação das invariantes do razão
 
 As invariantes I-1 (soma zero), I-2 (duas pernas em contas distintas),

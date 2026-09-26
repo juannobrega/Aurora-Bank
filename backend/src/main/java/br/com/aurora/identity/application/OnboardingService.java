@@ -2,12 +2,14 @@ package br.com.aurora.identity.application;
 
 import br.com.aurora.identity.domain.*;
 import br.com.aurora.identity.ports.UserRepository;
+import br.com.aurora.banking.ports.BankingRepository;
 import br.com.aurora.ledger.domain.Account;
 import br.com.aurora.ledger.domain.AccountType;
 import br.com.aurora.ledger.domain.LedgerRepository;
 import br.com.aurora.shared.crypto.TemplateCipher;
 import br.com.aurora.shared.error.DomainException;
 import br.com.aurora.shared.error.ErrorCode;
+import br.com.aurora.shared.money.Money;
 import br.com.aurora.shared.time.AuroraClock;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,15 +33,17 @@ public class OnboardingService {
 
     private final UserRepository users;
     private final LedgerRepository ledger;
+    private final BankingRepository banking;
     private final TemplateCipher cipher;
     private final PasswordEncoder passwordEncoder;
     private final AuroraClock clock;
 
     public OnboardingService(UserRepository users, LedgerRepository ledger,
-                             TemplateCipher cipher, PasswordEncoder passwordEncoder,
-                             AuroraClock clock) {
+                             BankingRepository banking, TemplateCipher cipher,
+                             PasswordEncoder passwordEncoder, AuroraClock clock) {
         this.users = users;
         this.ledger = ledger;
+        this.banking = banking;
         this.cipher = cipher;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
@@ -102,11 +106,23 @@ public class OnboardingService {
         var sealed = cipher.seal(template.toBytes());
         users.saveEnrollment(enrollment, sealed.ciphertext(), sealed.nonce(), cmd.algorithm());
 
-        // Rosto validado: a conta passa a existir de fato.
+        // Rosto validado: a conta passa a existir de fato, com conta
+        // corrente, cartão e a chave Pix do CPF já prontos.
         users.updateStatus(user.id(), UserStatus.ACTIVE);
-        ledger.saveAccount(new Account(UUID.randomUUID(), user.id(), user.id(),
-                AccountType.CHECKING, "Conta corrente",
-                br.com.aurora.shared.money.Money.ZERO, false));
+
+        var checking = new Account(UUID.randomUUID(), user.id(), user.id(),
+                AccountType.CHECKING, "Conta corrente", Money.ZERO, false);
+        ledger.saveAccount(checking);
+
+        var cardLiability = new Account(UUID.randomUUID(), user.id(), user.id(),
+                AccountType.CARD_LIABILITY, "Fatura do cartão", Money.ZERO, true);
+        ledger.saveAccount(cardLiability);
+        banking.createCard(user.id(), cardLiability.id(), lastFour(user.cpf()),
+                expiryFiveYearsOut());
+
+        banking.savePixKey(UUID.randomUUID(), user.id(), "cpf", user.cpf());
+        banking.notify(user.id(), "security", "Conta aberta",
+                "Sua conta está ativa. Bem-vindo ao Aurora.");
 
         return new User(user.id(), user.fullName(), user.cpf(), user.email(),
                 user.phone(), user.birthDate(), UserStatus.ACTIVE, user.createdAt());
@@ -131,6 +147,16 @@ public class OnboardingService {
         // Sucesso ou falha, a tentativa entra na trilha de auditoria.
         users.recordVerification(cmd.userId(), sealed.id(), match, cmd.deviceId());
         return match;
+    }
+
+    /** Últimos quatro do cartão, derivados do CPF só para dar estabilidade. */
+    private static String lastFour(String cpf) {
+        return cpf.substring(cpf.length() - 4);
+    }
+
+    private String expiryFiveYearsOut() {
+        var date = clock.today().plusYears(5);
+        return String.format("%02d/%02d", date.getMonthValue(), date.getYear() % 100);
     }
 
     private static String digitsOrNull(String raw) {
