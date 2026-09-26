@@ -21,10 +21,24 @@ exigir mudança em nenhuma view.
 
 ## Como rodar
 
+Tudo sobe em contêiner — banco e API:
+
 ```bash
-docker compose up -d db          # Postgres 16
-mvn test                         # testes de domínio (não precisam de banco)
-mvn spring-boot:run              # aplicação em http://localhost:8080/docs
+docker compose up --build        # sobe db + api
+# API em http://localhost:8080/docs
+```
+
+Para desenvolver com recarga rápida, sobe só o banco e roda a API local:
+
+```bash
+docker compose up -d db
+mvn spring-boot:run
+```
+
+Testes de domínio não precisam de banco:
+
+```bash
+mvn test
 ```
 
 ### Verificação das invariantes do razão
