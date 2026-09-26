@@ -1,0 +1,17 @@
+# Java / Maven
+target/
+*.class
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# macOS
+.DS_Store
+
+# Ambiente
+.env
