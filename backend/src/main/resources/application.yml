@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: aurora-bank
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aurora
+    username: aurora
+    password: aurora
+  jpa:
+    hibernate:
+      ddl-auto: validate      # o schema é do Flyway, nunca do Hibernate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /docs
