@@ -25,6 +25,15 @@ aurora:
     # TemplateCipher.generateKey().
     template-key: ${AURORA_TEMPLATE_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health   # só health atravessa; o resto fica fechado
+  endpoint:
+    health:
+      show-details: never
+
 server:
   port: 8080
 

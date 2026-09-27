@@ -26,12 +26,14 @@ public class CardService {
     private final MoneyMover mover;
     private final BankingRepository banking;
     private final LedgerRepository ledger;
+    private final LoanService loans;
 
     public CardService(MoneyMover mover, BankingRepository banking,
-                       LedgerRepository ledger) {
+                       LedgerRepository ledger, LoanService loans) {
         this.mover = mover;
         this.banking = banking;
         this.ledger = ledger;
+        this.loans = loans;
     }
 
     public record CardView(UUID id, String kind, String lastFour, String expiry,
@@ -92,6 +94,32 @@ public class CardService {
                                               invoice.plus(invoice))),
                 "PAGAMENTO_FATURA", "Pagamento de fatura", "Cartão Aurora",
                 TxCategory.credito, TxMethod.credito, false, invoice, null));
+    }
+
+    /**
+     * Parcela a fatura em aberto: quita a fatura atual e abre um contrato de
+     * crédito equivalente. O app tinha o botão "Parcelar" sem nada por trás;
+     * aqui o parcelamento vira dívida de verdade, com parcelas cobráveis.
+     */
+    @Transactional
+    public java.util.UUID installInvoice(UUID userId, int months) {
+        var card = requireCard(userId);
+        var invoice = ledger.balanceOf(card.liabilityAccountId());
+        if (!invoice.isPositive()) {
+            throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
+                    "Não há fatura para parcelar.");
+        }
+        // Zera a fatura movendo o passivo do cartão para o funding (o banco
+        // "adianta" o valor), e contrata o empréstimo que o cliente vai pagar.
+        mover.moveMany(new MoneyMover.MultiTransfer(
+                userId,
+                java.util.List.of(
+                        MoneyMover.Leg.debit(card.liabilityAccountId(), invoice),
+                        MoneyMover.Leg.credit(banking.fundingAccount(), invoice)),
+                "FATURA_PARCELADA", "Parcelamento de fatura", "Cartão Aurora",
+                TxCategory.credito, TxMethod.credito, false, invoice, null));
+
+        return loans.contract(userId, invoice, months).id();
     }
 
     @Transactional

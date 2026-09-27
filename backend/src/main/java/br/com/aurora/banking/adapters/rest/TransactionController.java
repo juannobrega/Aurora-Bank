@@ -193,6 +193,19 @@ public class TransactionController {
         return TxView.of(cards.payInvoice(me.userId()));
     }
 
+    public record InstallInvoiceRequest(@Min(2) @Max(24) int months) {}
+
+    public record InstallInvoiceResponse(java.util.UUID loanId) {}
+
+    @PostMapping("/card/invoice/installment")
+    @Operation(summary = "Parcela a fatura",
+               description = "Quita a fatura atual e abre um empréstimo com as parcelas.")
+    public InstallInvoiceResponse installInvoice(CurrentUser me,
+                                                 @Valid @RequestBody InstallInvoiceRequest r) {
+        me.requireStrongAuth();
+        return new InstallInvoiceResponse(cards.installInvoice(me.userId(), r.months()));
+    }
+
     public record CardSettingsRequest(Boolean blocked, Long creditLimitCents,
                                       Boolean contactless, Boolean onlinePurchases,
                                       Boolean international) {}

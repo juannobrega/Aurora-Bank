@@ -49,7 +49,8 @@ public class AccountController {
     public record Snapshot(UserView user, long balanceCents, CardService.CardView card,
                            List<InvestmentService.Position> holdings,
                            List<GoalView> goals, List<TxView> recentTransactions,
-                           long monthSpendingCents, int unreadNotifications) {}
+                           long monthSpendingCents, long monthlyBudgetCents,
+                           int creditScore, int unreadNotifications) {}
 
     public record UserView(UUID id, String fullName, String firstName, String initials,
                            String maskedCpf, String email, String status) {}
@@ -90,6 +91,8 @@ public class AccountController {
                 banking.statement(me.userId(), null, null, null, null, 5)
                         .stream().map(TxView::of).toList(),
                 banking.totalSpending(me.userId(), monthStart, clock.today()).cents(),
+                MONTHLY_BUDGET.cents(),
+                creditScore(me.userId()),
                 (int) banking.listNotifications(me.userId()).stream()
                         .filter(n -> !n.read()).count());
     }
@@ -148,6 +151,31 @@ public class AccountController {
                 .stream()
                 .map(c -> new CategorySpendView(c.category().name(), c.total().cents()))
                 .toList();
+    }
+
+    /** Orçamento mensal padrão. Um passo natural seria torná-lo editável. */
+    private static final Money MONTHLY_BUDGET = Money.of("4000.00");
+
+    /**
+     * Score de crédito derivado do histórico, em vez do 742 fixo do app.
+     *
+     * <p>Modelo simples e explicável: base que sobe com renda recebida,
+     * organização (cofrinho/investimento) e empréstimo em dia, e cai com
+     * parcela em atraso. Não é bureau de verdade — é aproximação honesta
+     * para o ambiente de estudo.
+     */
+    private int creditScore(UUID userId) {
+        var last90 = clock.today().minusDays(90);
+        int score = 600;
+        if (banking.sumCredits(userId, last90, clock.today()).isPositive()) score += 80;
+        if (!banking.listGoals(userId).isEmpty()
+                || !banking.listHoldings(userId).isEmpty()) score += 60;
+        for (var loan : banking.listLoans(userId)) {
+            if (loan.isSettled()) score += 40;
+            else if (loan.nextDue().map(i -> i.isOverdue(clock.today())).orElse(false)) score -= 120;
+            else score += 20;
+        }
+        return Math.max(300, Math.min(1000, score));
     }
 
     // ------------------------------------------------------ notificações
