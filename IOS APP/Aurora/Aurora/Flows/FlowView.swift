@@ -176,7 +176,7 @@ struct FlowView: View {
             title: "Digite seu PIN",
             subtitle: "Para autorizar \(shown.formatted)",
             allowsBiometrics: model.settings.biometricsEnabled
-        ) {
+        ) { _ in
             commit()
         }
     }
@@ -212,8 +212,24 @@ struct PinAuthorizationView: View {
     @Environment(AppModel.self) private var model
     let title: String
     let subtitle: String
+    var subtitleIsError = false
     var allowsBiometrics = true
-    var onSuccess: () -> Void
+    /// Quando true, valida o PIN no Keychain antes de chamar o callback
+    /// (fluxos de transação). Quando false, apenas repassa o PIN — quem
+    /// chama valida (login remoto, que confere na API).
+    var verifyLocally = true
+    var onSuccess: (String) -> Void
+
+    /// Conveniência para quem não precisa do PIN digitado.
+    init(title: String, subtitle: String, subtitleIsError: Bool = false,
+         allowsBiometrics: Bool = true, verifyLocally: Bool = true,
+         onSuccess: @escaping (String) -> Void) {
+        self.title = title; self.subtitle = subtitle
+        self.subtitleIsError = subtitleIsError
+        self.allowsBiometrics = allowsBiometrics
+        self.verifyLocally = verifyLocally
+        self.onSuccess = onSuccess
+    }
 
     @State private var pin = ""
     @State private var isError = false
@@ -225,7 +241,7 @@ struct PinAuthorizationView: View {
                 Text(title).font(.auroraHeadline).foregroundStyle(Theme.text)
                 Text(isError ? "PIN incorreto. Tente de novo." : subtitle)
                     .font(.auroraBody)
-                    .foregroundStyle(isError ? Theme.danger : Theme.text2)
+                    .foregroundStyle(isError || subtitleIsError ? Theme.danger : Theme.text2)
                     .multilineTextAlignment(.center)
                 PinDots(filled: pin.count, isError: isError).padding(.top, 8)
             }
@@ -263,8 +279,11 @@ struct PinAuthorizationView: View {
     }
 
     private func verify() {
+        if !verifyLocally {
+            let entered = pin; pin = ""; onSuccess(entered); return
+        }
         if model.security.verifyPIN(pin) {
-            onSuccess()
+            onSuccess(pin)
         } else {
             attempts += 1
             Haptics.error()
@@ -282,7 +301,7 @@ struct PinAuthorizationView: View {
             let ok = try await model.security.authenticateWithBiometrics(
                 reason: subtitle.isEmpty ? "Autorize para continuar" : subtitle
             )
-            if ok { onSuccess() }
+            if ok { onSuccess("") }
         } catch {
             // Usuário cancelou ou biometria indisponível: segue pelo PIN.
         }

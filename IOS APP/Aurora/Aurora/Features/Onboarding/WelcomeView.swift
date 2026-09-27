@@ -3,6 +3,7 @@ import SwiftUI
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
     @State private var showOnboarding = false
+    @State private var showSignIn = false
     @State private var showIntro = !ProcessInfo.processInfo
         .arguments.contains("-auroraSkipIntro")
 
@@ -16,6 +17,9 @@ struct WelcomeView: View {
         }
         .auroraBackground(horizon: true)
         .fullScreenCover(isPresented: $showOnboarding) { OnboardingView() }
+        .fullScreenCover(isPresented: $showSignIn) {
+            NavigationStack { SignInView() }
+        }
     }
 
     private var content: some View {
@@ -42,8 +46,10 @@ struct WelcomeView: View {
             VStack(spacing: 10) {
                 PrimaryButton(title: "Abrir minha conta") { showOnboarding = true }
                 SecondaryButton(title: "Já tenho conta") {
+                    // Aparelho com PIN local: vai direto ao desbloqueio.
+                    // Aparelho novo/reinstalado: pede CPF + PIN para logar na API.
                     if model.security.hasPIN() { model.phase = .locked }
-                    else { showOnboarding = true }
+                    else { showSignIn = true }
                 }
             }
             .padding(Theme.Space.gutter)

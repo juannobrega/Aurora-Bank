@@ -86,6 +86,7 @@ final class AppModel {
         } else {
             self.phase = security.hasPIN() ? .locked : .welcome
         }
+        loadRememberedIdentity()
     }
 
     // MARK: - Ciclo de vida
@@ -151,10 +152,38 @@ final class AppModel {
 
     var usesRemoteBackend: Bool { api != nil }
 
+    /// Lembra quem é o dono deste aparelho entre sessões, para a tela de
+    /// bloqueio saudar pelo nome antes de carregar o snapshot. Só dados de
+    /// identificação — nunca senha ou saldo.
+    func rememberIdentity(name: String, cpf: String, email: String) {
+        let d = UserDefaults.standard
+        d.set(name, forKey: "aurora.user.name")
+        d.set(cpf, forKey: "aurora.user.cpf")
+        d.set(email, forKey: "aurora.user.email")
+        user = User(name: name, cpf: cpf, email: email, phone: "")
+    }
+
+    /// CPF lembrado, para o login por PIN não pedir o CPF de novo.
+    var rememberedCpf: String? {
+        UserDefaults.standard.string(forKey: "aurora.user.cpf")
+    }
+
+    private func loadRememberedIdentity() {
+        let d = UserDefaults.standard
+        if let name = d.string(forKey: "aurora.user.name") {
+            user = User(name: name,
+                        cpf: d.string(forKey: "aurora.user.cpf") ?? "",
+                        email: d.string(forKey: "aurora.user.email") ?? "", phone: "")
+        }
+    }
+
     func lock() { phase = .locked }
 
     func signOut() {
         security.clearPIN()
+        let d = UserDefaults.standard
+        ["aurora.user.name", "aurora.user.cpf", "aurora.user.email"].forEach(d.removeObject(forKey:))
+        if let api { Task { await api.logout() } }
         phase = .welcome
         ledger = Ledger(openingBalance: 0)
         holdings = []; goals = []; loans = []; notifications = []

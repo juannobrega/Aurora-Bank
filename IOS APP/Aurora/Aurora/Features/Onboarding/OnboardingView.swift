@@ -14,6 +14,10 @@ struct OnboardingView: View {
     @State private var cpf = ""
     @State private var email = ""
     @State private var liveness: Liveness = .idle
+    @State private var faceTemplate: [Float]?
+    @State private var showCamera = false
+    @State private var submitting = false
+    @State private var submitError: String?
     @State private var accountKind = "digital"
     @State private var acceptedTerms = false
     @State private var pin = ""
@@ -47,6 +51,15 @@ struct OnboardingView: View {
         }
         .animation(.snappy(duration: 0.26), value: step)
         .auroraBackground()
+        .fullScreenCover(isPresented: $showCamera) {
+            FaceCaptureView(
+                onCaptured: { template in
+                    faceTemplate = template
+                    liveness = .done
+                    showCamera = false
+                },
+                onCancel: { showCamera = false })
+        }
         .toolbar {
             // O teclado numérico do CPF não tem tecla de retorno; sem isto
             // não há como fechá-lo para alcançar o botão de avançar.
@@ -171,7 +184,7 @@ struct OnboardingView: View {
 
     private var livenessText: String {
         switch liveness {
-        case .idle: "Toque em capturar quando estiver pronto"
+        case .idle: "Toque em Abrir câmera e aproxime o rosto"
         case .scanning: "Analisando…"
         case .done: "Prova de vida confirmada"
         }
@@ -309,7 +322,8 @@ struct OnboardingView: View {
 
     private var ctaTitle: String {
         switch step {
-        case .liveness: liveness == .done ? "Continuar" : "Capturar"
+        case .liveness: liveness == .done ? "Continuar" : "Abrir câmera"
+        case _ where submitting: "Enviando…"
         case .account:  "Continuar"
         case .pin:      "Abrir minha conta"
         case .identity: "Continuar"
@@ -322,7 +336,7 @@ struct OnboardingView: View {
             name.trimmingCharacters(in: .whitespaces).split(separator: " ").count >= 2
                 && CPF.isValid(cpf)
                 && email.contains("@") && email.contains(".")
-        case .liveness: liveness != .scanning
+        case .liveness: true   // o botão "Capturar" abre a câmera; "Continuar" avança
         case .account:  acceptedTerms
         case .pin:      pin.count == 4 && pinConfirm == pin
         }
@@ -334,17 +348,12 @@ struct OnboardingView: View {
         case .identity:
             step = .liveness
         case .liveness:
-            if liveness == .done { step = .account; return }
-            liveness = .scanning
-            Task {
-                try? await Task.sleep(for: .milliseconds(1500))
-                withAnimation(.snappy) { liveness = .done }
-                Haptics.success()
-            }
+            if liveness == .done { step = .account }
+            else { showCamera = true }        // abre a câmera real
         case .account:
             step = .pin
         case .pin:
-            finish()
+            Task { await finish() }
         }
     }
 
@@ -359,21 +368,33 @@ struct OnboardingView: View {
         }
     }
 
-    private func finish() {
-        do {
-            try model.security.setPIN(pin)
-        } catch {
-            pinError = "Não foi possível salvar o PIN neste aparelho."
-            return
+    private func finish() async {
+        let fullName = name.trimmingCharacters(in: .whitespaces).capitalizedWords
+        let template = faceTemplate ?? []
+        submitting = true; submitError = nil
+
+        // Backend real: cria a conta e cadastra o rosto no servidor.
+        if model.usesRemoteBackend {
+            do {
+                try await model.remoteSignUp(fullName: fullName, cpf: cpf,
+                                             email: email, pin: pin, faceFeatures: template)
+            } catch {
+                submitting = false
+                submitError = (error as? APIError)?.message
+                    ?? "Não foi possível criar a conta. Tente de novo."
+                return
+            }
         }
-        model.user = User(
-            name: name.trimmingCharacters(in: .whitespaces).capitalizedWords,
-            cpf: cpf,
-            email: email,
-            phone: ""
-        )
+
+        // PIN local (Face ID / desbloqueio) e identidade lembrada para a
+        // tela de bloqueio saber quem é antes do primeiro login.
+        do { try model.security.setPIN(pin) }
+        catch { submitting = false; pinError = "Não foi possível salvar o PIN."; return }
+
+        model.rememberIdentity(name: fullName, cpf: cpf, email: email)
+        submitting = false
         model.phase = .locked
-        model.showToast("Conta aprovada. Limite inicial de R$ 2.000,00")
+        model.showToast("Conta criada. Entre com seu PIN.")
         dismiss()
     }
 
