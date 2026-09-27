@@ -66,7 +66,11 @@ final class AppModel {
 
     private var toastTask: Task<Void, Never>?
 
-    init(account: any AccountServicing = MockAccountService(),
+    /// Cliente da API real, quando não está em modo mock. O login e os
+    /// fluxos usam este para falar com bank.pulsaz.com.br.
+    let api: AuroraAPIClient? = Backend.useMock ? nil : Backend.api
+
+    init(account: any AccountServicing = Backend.accountService(),
          security: any SecurityServicing = KeychainSecurityService()) {
         self.account = account
         self.security = security
@@ -114,6 +118,38 @@ final class AppModel {
         hideBalance = settings.hideBalanceOnOpen
         phase = .ready
     }
+
+    // MARK: - Autenticação na API (quando não é mock)
+
+    /// Cria a conta no servidor: dados + rosto. Devolve o id do usuário.
+    /// A prova de vida e o template são gerados no app (ver nota de segurança
+    /// no backend: hoje o servidor confia no cliente).
+    func remoteSignUp(fullName: String, cpf: String, email: String,
+                      pin: String, faceFeatures: [Float]) async throws {
+        guard let api else { return }
+        let userId = try await api.signUp(.init(
+            fullName: fullName, cpf: cpf, email: email, pin: pin, phone: nil))
+        try await api.enrollFace(.init(
+            userId: userId, features: faceFeatures, algorithm: "aurora-face-v1",
+            quality: 0.9, livenessPassed: true))
+    }
+
+    /// Entra por PIN contra a API e carrega a conta.
+    func remoteLoginPin(cpf: String, pin: String) async throws {
+        guard let api else { return }
+        try await api.loginWithPin(cpf: cpf, pin: pin)
+        await load()
+    }
+
+    /// Entra por rosto contra a API.
+    func remoteLoginFace(cpf: String, features: [Float]) async throws {
+        guard let api else { return }
+        try await api.loginWithFace(cpf: cpf, features: features,
+                                    algorithm: "aurora-face-v1", livenessPassed: true)
+        await load()
+    }
+
+    var usesRemoteBackend: Bool { api != nil }
 
     func lock() { phase = .locked }
 

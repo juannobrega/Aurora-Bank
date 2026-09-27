@@ -58,14 +58,18 @@ public interface BankingRepository {
 
     // Cartão
     Optional<CardRow> findCard(UUID userId);
-    void createCard(UUID userId, UUID liabilityAccountId, String lastFour, String expiry);
+    Optional<CardRow> findCardById(UUID userId, UUID cardId);
+    Optional<CardRow> findCardByNumber(String cardNumber);
+    List<CardRow> listCards(UUID userId);
+    void createCard(UUID userId, UUID liabilityAccountId, String kind, String lastFour,
+                    String expiry, String cardNumber, String cvv, String holderName);
     void updateCard(UUID cardId, boolean blocked, Money limit,
                     boolean contactless, boolean online, boolean international);
 
     record CardRow(UUID id, UUID userId, UUID liabilityAccountId, String kind,
                    String lastFour, String expiry, Money creditLimit, boolean blocked,
                    boolean contactless, boolean onlinePurchases, boolean international,
-                   int invoiceDueDay) {}
+                   int invoiceDueDay, String cardNumber, String cvv, String holderName) {}
 
     // Empréstimos
     UUID createLoanAccount(UUID userId);
@@ -86,6 +90,11 @@ public interface BankingRepository {
     List<ContactRow> listContacts(UUID userId, int limit);
 
     record ContactRow(UUID id, String name, String keyValue, String bank) {}
+
+    // Rendimento automático
+    java.util.List<UUID> checkingAccountsToAccrue();
+    java.time.Instant lastAccrual(UUID accountId);
+    void updateAccrual(UUID accountId, java.time.Instant at, Money yielded);
 
     // Pagamentos
     boolean isBoletoPaid(String digitableLine);

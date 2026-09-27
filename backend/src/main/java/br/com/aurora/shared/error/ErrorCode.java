@@ -75,6 +75,18 @@ public enum ErrorCode {
     VALOR_RECARGA_INVALIDO(HttpStatus.UNPROCESSABLE_ENTITY,
         "Valor de recarga não disponível para esta operadora."),
 
+    // Cartão
+    CARTAO_NAO_ENCONTRADO(HttpStatus.NOT_FOUND, "Cartão não encontrado."),
+    CARTAO_CVV_INVALIDO(HttpStatus.UNPROCESSABLE_ENTITY, "CVV incorreto."),
+    COMPRA_ONLINE_BLOQUEADA(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Compras online estão desativadas neste cartão."),
+    LIMITE_CARTAO_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Compra acima do limite disponível do cartão."),
+
+    // Investimentos
+    SEM_RENDIMENTO(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Esta posição ainda não tem rendimento para aplicar."),
+
     // Idempotência
     IDEMPOTENCIA_EM_ANDAMENTO(HttpStatus.CONFLICT,
         "Uma requisição com esta chave ainda está em processamento."),

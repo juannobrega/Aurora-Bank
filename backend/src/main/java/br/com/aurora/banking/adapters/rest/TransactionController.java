@@ -178,6 +178,13 @@ public class TransactionController {
                 Money.ofCents(r.amountCents())));
     }
 
+    @PostMapping("/investments/{productId}/apply-earnings")
+    @Operation(summary = "Reaplica o rendimento da posição")
+    public TxView applyEarnings(CurrentUser me, @PathVariable String productId) {
+        me.requireStrongAuth();
+        return TxView.of(investments.applyEarnings(me.userId(), productId));
+    }
+
     @PostMapping("/investments/{productId}/redeem")
     @Operation(summary = "Resgata")
     public TxView redeem(CurrentUser me, @PathVariable String productId,
@@ -190,9 +197,47 @@ public class TransactionController {
     // ------------------------------------------------------------- cartão
 
     @GetMapping("/card")
-    @Operation(summary = "Meu cartão e a fatura")
+    @Operation(summary = "Meu cartão principal e a fatura")
     public CardService.CardView card(CurrentUser me) {
         return cards.view(me.userId());
+    }
+
+    public record CardListItem(String id, String kind, String lastFour, String maskedNumber,
+                               String expiry, boolean blocked) {}
+
+    @GetMapping("/cards")
+    @Operation(summary = "Lista todos os cartões (físico e virtuais)")
+    public List<CardListItem> cardList(CurrentUser me) {
+        return cards.list(me.userId()).stream()
+                .map(c -> new CardListItem(c.id().toString(), c.kind(), c.lastFour(),
+                        "•••• •••• •••• " + c.lastFour(), c.expiry(), c.blocked()))
+                .toList();
+    }
+
+    public record VirtualCardView(String id, String number, String cvv,
+                                  String expiry, String holderName) {}
+
+    @PostMapping("/cards/virtual")
+    @Operation(summary = "Cria um cartão virtual para compras online")
+    public VirtualCardView createVirtual(CurrentUser me) {
+        me.requireStrongAuth();
+        var c = cards.createVirtual(me.userId());
+        return new VirtualCardView(c.id().toString(), c.cardNumber(), c.cvv(),
+                c.expiry(), c.holderName());
+    }
+
+    public record OnlinePurchaseRequest(@NotBlank String cardNumber, @NotBlank String cvv,
+                                        @Positive long amountCents, @NotBlank String merchant,
+                                        String category) {}
+
+    @PostMapping("/cards/purchase")
+    @Operation(summary = "Compra online informando número e CVV do cartão",
+               description = "Valida cartão, CVV, bloqueio e limite; lança na fatura.")
+    public TxView purchaseOnline(CurrentUser me, @Valid @RequestBody OnlinePurchaseRequest r) {
+        me.requireStrongAuth();
+        var category = r.category() == null ? TxCategory.outros : TxCategory.valueOf(r.category());
+        return TxView.of(cards.authorizeByNumber(me.userId(), r.cardNumber(), r.cvv(),
+                Money.ofCents(r.amountCents()), r.merchant(), category));
     }
 
     public record PurchaseRequest(@Positive long amountCents, @NotBlank String merchant,

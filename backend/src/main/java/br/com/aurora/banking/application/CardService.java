@@ -53,22 +53,73 @@ public class CardService {
                 card.international(), card.invoiceDueDay());
     }
 
-    /** Compra no crédito: não toca a conta corrente, engorda a fatura. */
+    public List<BankingRepository.CardRow> list(UUID userId) {
+        return banking.listCards(userId);
+    }
+
+    /**
+     * Cria um cartão virtual: número e CVV próprios, mesma fatura do físico.
+     * Serve para compras online sem expor o número do cartão físico.
+     */
+    @Transactional
+    public BankingRepository.CardRow createVirtual(UUID userId) {
+        var physical = requireCard(userId);
+        var num = String.format("5412 %04d %04d %04d",
+                (int)(Math.random()*10000), (int)(Math.random()*10000), (int)(Math.random()*10000));
+        var cvv = String.format("%03d", (int)(Math.random()*1000));
+        banking.createCard(userId, physical.liabilityAccountId(), "virtual",
+                num.substring(num.length() - 4), physical.expiry(), num, cvv,
+                physical.holderName());
+        return banking.listCards(userId).stream()
+                .filter(c -> c.cardNumber().equals(num)).findFirst().orElseThrow();
+    }
+
+    /** Compra no crédito pelo cartão principal. */
     @Transactional
     public BankTransaction purchase(UUID userId, Money amount, String merchant,
                                     TxCategory category) {
-        var card = requireCard(userId);
+        return authorize(requireCard(userId), amount, merchant, category, false);
+    }
+
+    /**
+     * Autoriza uma compra online informando número e CVV do cartão — o fluxo
+     * de "digitar o código do cartão". Valida cartão, CVV, bloqueio e limite,
+     * e lança a compra na fatura. É o papel que uma maquininha/gateway faria.
+     */
+    @Transactional
+    public BankTransaction authorizeByNumber(UUID userId, String cardNumber, String cvv,
+                                             Money amount, String merchant,
+                                             TxCategory category) {
+        var card = banking.findCardByNumber(cardNumber.trim())
+                .filter(c -> c.userId().equals(userId))
+                .orElseThrow(() -> new DomainException(ErrorCode.CARTAO_NAO_ENCONTRADO));
+        if (!card.cvv().equals(cvv.trim())) {
+            throw new DomainException(ErrorCode.CARTAO_CVV_INVALIDO);
+        }
+        if (!card.onlinePurchases()) {
+            throw new DomainException(ErrorCode.COMPRA_ONLINE_BLOQUEADA);
+        }
+        return authorize(card, amount, merchant, category, true);
+    }
+
+    /** Lógica comum de autorização: bloqueio, limite, e lançamento na fatura. */
+    private BankTransaction authorize(BankingRepository.CardRow card, Money amount,
+                                      String merchant, TxCategory category, boolean online) {
         if (card.blocked()) {
             throw new DomainException(ErrorCode.CONTA_BLOQUEADA, "Cartão bloqueado.");
         }
+        if (online && !card.onlinePurchases()) {
+            throw new DomainException(ErrorCode.COMPRA_ONLINE_BLOQUEADA);
+        }
         var invoice = ledger.balanceOf(card.liabilityAccountId());
         if (invoice.plus(amount).isGreaterThan(card.creditLimit())) {
-            throw new DomainException(ErrorCode.SALDO_INSUFICIENTE,
+            throw new DomainException(ErrorCode.LIMITE_CARTAO_EXCEDIDO,
                     "Compra acima do limite disponível.");
         }
         return mover.move(new MoneyMover.Transfer(
-                userId, banking.expenseAccount(), card.liabilityAccountId(), amount,
-                "COMPRA_CREDITO", merchant, "Cartão de crédito",
+                card.userId(), banking.expenseAccount(), card.liabilityAccountId(), amount,
+                "COMPRA_CREDITO", merchant,
+                online ? "Compra online" : "Cartão de crédito",
                 category, TxMethod.credito, false, null));
     }
 

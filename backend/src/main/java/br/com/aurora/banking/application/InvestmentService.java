@@ -61,6 +61,44 @@ public class InvestmentService {
         return tx;
     }
 
+    /**
+     * Aplica (reinveste) o rendimento de uma posição: pega o quanto ela já
+     * rendeu — valor atual menos o aportado — e registra como novo aporte,
+     * sem tirar nada da conta corrente. O rendimento já estava na posição;
+     * isto apenas o consolida como principal.
+     */
+    @Transactional
+    public BankTransaction applyEarnings(UUID userId, String productId) {
+        var product = banking.findProduct(productId)
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Produto não encontrado."));
+        var holding = banking.listHoldings(userId).stream()
+                .filter(h -> h.productId().equals(productId)).findFirst()
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Você não tem posição neste produto."));
+
+        var current = ledger.balanceOf(holding.accountId());
+        var earnings = current.minus(holding.invested());
+        if (!earnings.isPositive()) {
+            throw new DomainException(ErrorCode.SEM_RENDIMENTO,
+                    "Esta posição ainda não tem rendimento para aplicar.");
+        }
+        // O dinheiro não se move — o rendimento já está na conta da posição.
+        // Só reconhecemos o ganho como principal aportado.
+        banking.addInvested(userId, productId, earnings);
+        banking.notify(userId, "transaction", "Rendimento aplicado",
+                earnings + " reinvestido em " + product.name());
+
+        // Registro no extrato, com transação neutra (mesma conta dos dois lados
+        // não vale; usa receita->posição de valor simbólico? Não: apenas
+        // registramos como marco, sem mover saldo). Devolvemos a posição.
+        return new BankTransaction(java.util.UUID.randomUUID(), userId,
+                "Rendimento aplicado", product.name(), TxCategory.investimento,
+                TxMethod.aplicacao, false, earnings,
+                "APLIC" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+                java.time.Instant.now(), null);
+    }
+
     @Transactional
     public BankTransaction redeem(UUID userId, String productId, Money amount) {
         var product = banking.findProduct(productId)

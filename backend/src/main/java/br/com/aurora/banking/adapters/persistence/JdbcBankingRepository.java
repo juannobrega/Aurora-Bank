@@ -312,18 +312,46 @@ public class JdbcBankingRepository implements BankingRepository {
 
     @Override
     public Optional<CardRow> findCard(UUID userId) {
-        return jdbc.query("SELECT * FROM cards WHERE user_id = :user LIMIT 1",
-                Map.of("user", userId), CARD_MAPPER).stream().findFirst();
+        // O físico é o cartão principal — a fatura da conta.
+        return jdbc.query("""
+            SELECT * FROM cards WHERE user_id = :user ORDER BY created_at LIMIT 1
+            """, Map.of("user", userId), CARD_MAPPER).stream().findFirst();
     }
 
     @Override
-    public void createCard(UUID userId, UUID liabilityAccountId, String lastFour, String expiry) {
+    public Optional<CardRow> findCardById(UUID userId, UUID cardId) {
+        return jdbc.query("SELECT * FROM cards WHERE user_id = :user AND id = :id",
+                Map.of("user", userId, "id", cardId), CARD_MAPPER).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CardRow> findCardByNumber(String cardNumber) {
+        return jdbc.query("SELECT * FROM cards WHERE card_number = :num",
+                Map.of("num", cardNumber), CARD_MAPPER).stream().findFirst();
+    }
+
+    @Override
+    public List<CardRow> listCards(UUID userId) {
+        return jdbc.query("SELECT * FROM cards WHERE user_id = :user ORDER BY created_at",
+                Map.of("user", userId), CARD_MAPPER);
+    }
+
+    @Override
+    public void createCard(UUID userId, UUID liabilityAccountId, String kind,
+                           String lastFour, String expiry, String cardNumber,
+                           String cvv, String holderName) {
         jdbc.update("""
-            INSERT INTO cards (id, user_id, liability_account_id, last_four, expiry)
-            VALUES (:id, :user, :account, :last4, :expiry)
+            INSERT INTO cards (id, user_id, liability_account_id, kind, last_four,
+                               expiry, card_number, cvv, holder_name)
+            VALUES (:id, :user, :account, CAST(:kind AS card_kind), :last4, :expiry,
+                    :num, :cvv, :holder)
             """,
-            Map.of("id", UUID.randomUUID(), "user", userId,
-                   "account", liabilityAccountId, "last4", lastFour, "expiry", expiry));
+            new MapSqlParameterSource()
+                .addValue("id", UUID.randomUUID()).addValue("user", userId)
+                .addValue("account", liabilityAccountId).addValue("kind", kind)
+                .addValue("last4", lastFour).addValue("expiry", expiry)
+                .addValue("num", cardNumber).addValue("cvv", cvv)
+                .addValue("holder", holderName));
     }
 
     @Override
@@ -469,6 +497,47 @@ public class JdbcBankingRepository implements BankingRepository {
             new MapSqlParameterSource().addValue("user", userId).addValue("limit", limit),
             (rs, n) -> new ContactRow(rs.getObject("id", UUID.class),
                     rs.getString("name"), rs.getString("key_value"), rs.getString("bank")));
+    }
+
+    // --------------------------------------------------------- rendimento
+
+    @Override
+    public List<UUID> checkingAccountsToAccrue() {
+        return jdbc.query("""
+            SELECT id FROM accounts
+             WHERE type = 'CHECKING' AND closed_at IS NULL AND owner_id IS NOT NULL
+            """, (rs, n) -> rs.getObject("id", UUID.class));
+    }
+
+    @Override
+    public java.time.Instant lastAccrual(UUID accountId) {
+        // Sem registro ainda: começa a render a partir de agora, não retroage.
+        var rows = jdbc.query("""
+            SELECT last_accrued_at FROM yield_accruals WHERE account_id = :id
+            """, Map.of("id", accountId),
+            (rs, n) -> rs.getTimestamp("last_accrued_at").toInstant());
+        return rows.stream().findFirst().orElseGet(() -> {
+            var now = java.time.Instant.now();
+            jdbc.update("""
+                INSERT INTO yield_accruals (account_id, last_accrued_at) VALUES (:id, now())
+                ON CONFLICT (account_id) DO NOTHING
+                """, Map.of("id", accountId));
+            return now;
+        });
+    }
+
+    @Override
+    public void updateAccrual(UUID accountId, java.time.Instant at, Money yielded) {
+        jdbc.update("""
+            INSERT INTO yield_accruals (account_id, last_accrued_at, total_yielded)
+            VALUES (:id, :at, :y)
+            ON CONFLICT (account_id) DO UPDATE
+               SET last_accrued_at = :at,
+                   total_yielded = yield_accruals.total_yielded + :y
+            """,
+            new MapSqlParameterSource().addValue("id", accountId)
+                .addValue("at", java.sql.Timestamp.from(at))
+                .addValue("y", yielded.amount()));
     }
 
     // --------------------------------------------------------- pagamentos
@@ -629,7 +698,8 @@ public class JdbcBankingRepository implements BankingRepository {
             rs.getString("last_four"), rs.getString("expiry"),
             new Money(rs.getBigDecimal("credit_limit")), rs.getBoolean("blocked"),
             rs.getBoolean("contactless"), rs.getBoolean("online_purchases"),
-            rs.getBoolean("international"), rs.getInt("invoice_due_day"));
+            rs.getBoolean("international"), rs.getInt("invoice_due_day"),
+            rs.getString("card_number"), rs.getString("cvv"), rs.getString("holder_name"));
 
     private static final RowMapper<PixKeyRow> PIX_KEY_MAPPER = (rs, n) -> new PixKeyRow(
             rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),

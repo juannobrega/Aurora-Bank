@@ -62,22 +62,35 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch router.selection {
-                case .home:      NavigationStack { HomeView() }
-                case .statement: NavigationStack { StatementView() }
-                case .pix:       NavigationStack { PixView() }
-                case .cards:     NavigationStack { CardsView() }
-                case .profile:   NavigationStack { ProfileView() }
-                }
+        Group {
+            switch router.selection {
+            case .home:      NavigationStack { HomeView() }
+            case .statement: NavigationStack { StatementView() }
+            case .pix:       NavigationStack { PixView() }
+            case .cards:     NavigationStack { CardsView() }
+            case .profile:   NavigationStack { ProfileView() }
             }
-            .safeAreaPadding(.bottom, 76)
-            .environment(router)
-
+        }
+        .environment(router)
+        // safeAreaInset reserva o espaço da barra E respeita a home
+        // indicator sozinho — o conteúdo nunca fica escondido atrás dela, e
+        // a barra não colide com a barra do sistema.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             AuroraTabBar(selection: Bindable(router).selection)
                 .padding(.horizontal, Theme.Space.base)
-                .padding(.bottom, Theme.Space.sm)
+                .padding(.top, Theme.Space.sm)
+                // Folga mínima abaixo da barra em aparelhos de borda reta;
+                // onde há home indicator, o safeAreaInset já a afasta.
+                .padding(.bottom, Theme.Space.xs)
+                .background(
+                    // Um leve degradê para o conteúdo não "grudar" na barra
+                    // ao rolar por baixo dela.
+                    LinearGradient(colors: [Theme.navy.opacity(0), Theme.navy],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 90)
+                        .allowsHitTesting(false),
+                    alignment: .bottom
+                )
         }
     }
 }

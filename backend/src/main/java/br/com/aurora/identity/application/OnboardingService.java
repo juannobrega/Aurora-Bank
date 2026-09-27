@@ -146,8 +146,9 @@ public class OnboardingService {
         var cardLiability = new Account(UUID.randomUUID(), user.id(), user.id(),
                 AccountType.CARD_LIABILITY, "Fatura do cartão", Money.ZERO, true);
         ledger.saveAccount(cardLiability);
-        banking.createCard(user.id(), cardLiability.id(), lastFour(user.cpf()),
-                expiryFiveYearsOut());
+        banking.createCard(user.id(), cardLiability.id(), "fisico", lastFour(user.cpf()),
+                expiryFiveYearsOut(), generateCardNumber(user.cpf()),
+                generateCvv(user.cpf()), user.fullName().toUpperCase());
 
         banking.savePixKey(UUID.randomUUID(), user.id(), "cpf", user.cpf());
         banking.notify(user.id(), "security", "Conta aberta",
@@ -181,6 +182,16 @@ public class OnboardingService {
     /** Últimos quatro do cartão, derivados do CPF só para dar estabilidade. */
     private static String lastFour(String cpf) {
         return cpf.substring(cpf.length() - 4);
+    }
+
+    /** Número de cartão determinístico (Mastercard 5412...) só para o mock. */
+    private static String generateCardNumber(String cpf) {
+        int h = Math.abs(cpf.hashCode());
+        return String.format("5412 %04d %04d %04d", h % 10000, (h / 7) % 10000,
+                Integer.parseInt(cpf.substring(cpf.length() - 4)) % 10000);
+    }
+    private static String generateCvv(String cpf) {
+        return String.format("%03d", Math.abs((cpf + "cvv").hashCode()) % 1000);
     }
 
     private String expiryFiveYearsOut() {
