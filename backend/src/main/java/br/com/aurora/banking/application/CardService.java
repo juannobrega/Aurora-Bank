@@ -110,7 +110,9 @@ public class CardService {
                     "Não há fatura para parcelar.");
         }
         // Zera a fatura movendo o passivo do cartão para o funding (o banco
-        // "adianta" o valor), e contrata o empréstimo que o cliente vai pagar.
+        // "adianta" a quitação). O openContract registra a dívida SEM
+        // desembolsar — o cliente não recebe dinheiro, só passa a dever em
+        // parcelas. Usar o contract completo depositaria a fatura na conta.
         mover.moveMany(new MoneyMover.MultiTransfer(
                 userId,
                 java.util.List.of(
@@ -119,7 +121,7 @@ public class CardService {
                 "FATURA_PARCELADA", "Parcelamento de fatura", "Cartão Aurora",
                 TxCategory.credito, TxMethod.credito, false, invoice, null));
 
-        return loans.contract(userId, invoice, months).id();
+        return loans.openContract(userId, invoice, months).id();
     }
 
     @Transactional

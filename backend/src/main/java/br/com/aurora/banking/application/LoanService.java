@@ -46,8 +46,36 @@ public class LoanService {
                 total.minus(principal), "2,49% a.m.");
     }
 
+    /**
+     * Empréstimo pessoal: cria a dívida <b>e</b> desembolsa o dinheiro na
+     * conta corrente.
+     */
     @Transactional
     public Loan contract(UUID userId, Money principal, int months) {
+        var loan = openContract(userId, principal, months);
+
+        mover.move(new MoneyMover.Transfer(
+                userId, banking.fundingAccount(), banking.checkingAccountOf(userId),
+                principal, "EMPRESTIMO_DESEMBOLSO", "Empréstimo pessoal",
+                months + "x de " + loan.installments().get(0).amount(),
+                TxCategory.credito, TxMethod.emprestimo, true, null));
+
+        banking.notify(userId, "transaction", "Empréstimo aprovado",
+                principal + " já está na sua conta");
+        return loan;
+    }
+
+    /**
+     * Cria o contrato e registra a dívida no passivo, <b>sem</b> desembolsar
+     * dinheiro na conta.
+     *
+     * <p>Usado pelo parcelamento de fatura: ali o cliente não recebe nada —
+     * a fatura, que já saiu do passivo do cartão, vira a dívida deste
+     * contrato. Reusar o {@code contract} completo depositaria o valor da
+     * fatura na conta corrente, dando dinheiro grátis.
+     */
+    @Transactional
+    public Loan openContract(UUID userId, Money principal, int months) {
         if (months < 1 || months > 48) {
             throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
                     "Escolha entre 1 e 48 parcelas.");
@@ -66,20 +94,14 @@ public class LoanService {
                 MONTHLY_RATE, months, installments, clock.instant());
         banking.saveLoan(loan);
 
-        // O dinheiro entra na conta; a dívida fica registrada no passivo.
-        mover.move(new MoneyMover.Transfer(
-                userId, banking.fundingAccount(), banking.checkingAccountOf(userId),
-                principal, "EMPRESTIMO_DESEMBOLSO", "Empréstimo pessoal",
-                months + "x de " + payment, TxCategory.credito, TxMethod.emprestimo,
-                true, null));
-
+        // Reconhece a dívida no passivo. A contraparte é o funding: o banco
+        // "adiantou" o valor (no empréstimo, para a conta; no parcelamento,
+        // para quitar a fatura). Nenhum dinheiro toca a conta corrente aqui.
         mover.move(new MoneyMover.Transfer(
                 userId, liabilityAccount, banking.fundingAccount(),
                 payment.times(months), "EMPRESTIMO_DIVIDA", "Dívida contratada",
                 "Saldo devedor", TxCategory.credito, TxMethod.emprestimo, false, null));
 
-        banking.notify(userId, "transaction", "Empréstimo aprovado",
-                principal + " já está na sua conta");
         return loan;
     }
 

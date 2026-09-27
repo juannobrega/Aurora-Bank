@@ -76,6 +76,9 @@ public class AccountController {
                 .orElseThrow(() -> new DomainException(ErrorCode.USUARIO_NAO_ENCONTRADO));
         var checking = banking.checkingAccountOf(me.userId());
         var monthStart = clock.today().withDayOfMonth(1);
+        // Carrega uma vez e reaproveita: o score consultava goals de novo.
+        var goals = banking.listGoals(me.userId());
+        var loans = banking.listLoans(me.userId());
 
         return new Snapshot(
                 new UserView(user.id(), user.fullName(), user.firstName(),
@@ -84,7 +87,7 @@ public class AccountController {
                 ledger.balanceOf(checking).cents(),
                 cards.view(me.userId()),
                 investments.positions(me.userId()),
-                banking.listGoals(me.userId()).stream()
+                goals.stream()
                         .map(g -> new GoalView(g.id(), g.name(), g.saved().cents(),
                                 g.target().cents(), g.symbol(), g.deadline(), g.progress()))
                         .toList(),
@@ -92,7 +95,7 @@ public class AccountController {
                         .stream().map(TxView::of).toList(),
                 banking.totalSpending(me.userId(), monthStart, clock.today()).cents(),
                 MONTHLY_BUDGET.cents(),
-                creditScore(me.userId()),
+                creditScore(me.userId(), goals, loans),
                 (int) banking.listNotifications(me.userId()).stream()
                         .filter(n -> !n.read()).count());
     }
@@ -164,13 +167,23 @@ public class AccountController {
      * parcela em atraso. Não é bureau de verdade — é aproximação honesta
      * para o ambiente de estudo.
      */
-    private int creditScore(UUID userId) {
+    private int creditScore(UUID userId, java.util.List<br.com.aurora.banking.domain.Goal> goals,
+                            java.util.List<br.com.aurora.banking.domain.Loan> loans) {
         var last90 = clock.today().minusDays(90);
         int score = 600;
-        if (banking.sumCredits(userId, last90, clock.today()).isPositive()) score += 80;
-        if (!banking.listGoals(userId).isEmpty()
-                || !banking.listHoldings(userId).isEmpty()) score += 60;
-        for (var loan : banking.listLoans(userId)) {
+
+        // Renda: só salário conta, não empréstimo. Contar todo crédito faria
+        // o cliente subir o próprio score tomando dinheiro emprestado.
+        boolean hasIncome = banking.statement(userId, last90, clock.today(),
+                        true, null, 200).stream()
+                .anyMatch(t -> t.category() == br.com.aurora.banking.domain.TxCategory.salario);
+        if (hasIncome) score += 80;
+
+        // Organização financeira.
+        if (!goals.isEmpty()) score += 60;
+
+        // Histórico de crédito.
+        for (var loan : loans) {
             if (loan.isSettled()) score += 40;
             else if (loan.nextDue().map(i -> i.isOverdue(clock.today())).orElse(false)) score -= 120;
             else score += 20;
