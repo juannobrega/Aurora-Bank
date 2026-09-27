@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.UUID;
@@ -27,6 +28,9 @@ public class AuthService {
 
     /** Tentativas erradas antes de bloquear temporariamente. */
     private static final int MAX_ATTEMPTS = 5;
+
+    /** Quanto tempo a conta fica bloqueada depois de estourar o limite. */
+    private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
 
     private final UserRepository users;
     private final SessionRepository sessions;
@@ -54,19 +58,34 @@ public class AuthService {
 
     // ------------------------------------------------------------- login
 
-    /** Entrada por PIN. */
+    /**
+     * Entrada por PIN.
+     *
+     * <p>Quatro dígitos são dez mil combinações: sem limite de tentativas,
+     * um atacante varre tudo em minutos. O bloqueio temporário é o que
+     * torna o espaço pequeno aceitável.
+     */
     @Transactional
     public Tokens loginWithPin(String cpf, String pin, DeviceInfo deviceInfo) {
         var user = users.findByCpf(Cpf.normalize(cpf))
                 .orElseThrow(() -> new DomainException(ErrorCode.PIN_INCORRETO));
         requireActive(user);
 
+        var lock = users.lockState(user.id());
+        if (lock.isLocked(clock.instant())) {
+            throw new DomainException(ErrorCode.CONTA_BLOQUEADA,
+                    "Tente novamente mais tarde ou entre com biometria.");
+        }
+
         String hash = users.findPinHash(user.id())
                 .orElseThrow(() -> new DomainException(ErrorCode.PIN_INCORRETO));
 
         if (!encoder.matches(pin, hash)) {
+            users.registerFailedPin(user.id(), MAX_ATTEMPTS, LOCK_DURATION);
             throw new DomainException(ErrorCode.PIN_INCORRETO);
         }
+
+        users.clearFailedPin(user.id());
         var device = registerOrUpdateDevice(user.id(), deviceInfo);
         return openSession(user.id(), device.id(), TokenService.AuthLevel.STRONG);
     }
@@ -118,7 +137,12 @@ public class AuthService {
                 .ifPresent(s -> sessions.revoke(s.id(), "logout"));
     }
 
-    /** Encerra as outras sessões, mantendo a atual. */
+    /**
+     * Encerra as outras sessões, mantendo a atual.
+     *
+     * @param currentSessionId sessão a preservar — vem do token de quem
+     *        chamou. Passar {@code null} encerraria a própria sessão junto.
+     */
     @Transactional
     public int revokeOtherSessions(UUID userId, UUID currentSessionId) {
         return sessions.revokeAllFor(userId, currentSessionId, "encerrada pelo usuário");
@@ -126,7 +150,9 @@ public class AuthService {
 
     @Transactional
     public void revokeDevice(UUID userId, UUID deviceId) {
-        users.updateDeviceStatus(deviceId, DeviceStatus.REVOKED);
+        if (!users.updateDeviceStatus(userId, deviceId, DeviceStatus.REVOKED)) {
+            throw new DomainException(ErrorCode.DISPOSITIVO_NAO_RECONHECIDO);
+        }
         sessions.revokeAllFor(userId, null, "dispositivo revogado");
     }
 
@@ -165,7 +191,7 @@ public class AuthService {
         sessions.create(sessionId, userId, deviceId, sha256(refresh), expires);
 
         return new Tokens(
-                tokens.issueAccessToken(userId, deviceId, level),
+                tokens.issueAccessToken(userId, deviceId, sessionId, level),
                 refresh,
                 TokenService.ACCESS_TTL.toSeconds(),
                 sessionId);

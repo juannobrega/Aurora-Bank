@@ -39,9 +39,17 @@ public class PixService {
                     "Entre 20h e 6h o limite é " + NIGHT_LIMIT + ".");
         }
 
+        var destination = banking.findPixKeyByValue(cmd.pixKey());
+
+        // Enviar para a própria chave produziria uma transação com origem e
+        // destino iguais, que o razão recusa — melhor dizer isso claramente
+        // do que devolver erro interno.
+        if (destination.isPresent() && destination.get().userId().equals(cmd.userId())) {
+            throw new DomainException(ErrorCode.PIX_PARA_SI_MESMO);
+        }
+
         // Se a chave é de outro usuário daqui, o dinheiro vai direto para a
         // conta dele; senão sai pela conta de liquidação, rumo a outro banco.
-        var destination = banking.findPixKeyByValue(cmd.pixKey());
         UUID toAccount = destination
                 .map(k -> banking.checkingAccountOf(k.userId()))
                 .orElseGet(banking::settlementAccount);

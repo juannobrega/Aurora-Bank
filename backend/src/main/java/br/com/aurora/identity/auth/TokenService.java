@@ -42,12 +42,17 @@ public class TokenService {
         this.clock = clock;
     }
 
-    /** Token de acesso com o id do usuário, o device e o nível de garantia. */
-    public String issueAccessToken(UUID userId, UUID deviceId, AuthLevel level) {
+    /**
+     * Token de acesso com usuário, dispositivo, sessão e nível de garantia.
+     * A sessão vai junto para que "encerrar as outras" saiba qual poupar.
+     */
+    public String issueAccessToken(UUID userId, UUID deviceId, UUID sessionId,
+                                   AuthLevel level) {
         var now = clock.instant();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("did", deviceId.toString())
+                .claim("sid", sessionId.toString())
                 .claim("aal", level.name())
                 .issuedAt(java.util.Date.from(now))
                 .expiration(java.util.Date.from(now.plus(ACCESS_TTL)))
@@ -62,6 +67,7 @@ public class TokenService {
             return Optional.of(new AuthenticatedUser(
                     UUID.fromString(c.getSubject()),
                     UUID.fromString(c.get("did", String.class)),
+                    UUID.fromString(c.get("sid", String.class)),
                     AuthLevel.valueOf(c.get("aal", String.class))));
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();   // expirado, adulterado ou malformado
@@ -75,7 +81,8 @@ public class TokenService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
     }
 
-    public record AuthenticatedUser(UUID userId, UUID deviceId, AuthLevel level) {}
+    public record AuthenticatedUser(UUID userId, UUID deviceId, UUID sessionId,
+                                    AuthLevel level) {}
 
     /**
      * Nível de garantia da autenticação. Operações de dinheiro exigem

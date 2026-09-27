@@ -107,6 +107,7 @@ public class AuthController {
     @DeleteMapping("/devices/{deviceId}")
     @Operation(summary = "Revoga um aparelho")
     public void revokeDevice(CurrentUser me, @PathVariable UUID deviceId) {
+        me.requireStrongAuth();
         auth.revokeDevice(me.userId(), deviceId);
     }
 
@@ -115,7 +116,8 @@ public class AuthController {
     @PostMapping("/sessions/revoke-others")
     @Operation(summary = "Encerra as outras sessões")
     public RevokeSessionsResponse revokeOthers(CurrentUser me) {
-        return new RevokeSessionsResponse(auth.revokeOtherSessions(me.userId(), null));
+        return new RevokeSessionsResponse(
+                auth.revokeOtherSessions(me.userId(), me.sessionId()));
     }
 
     private static DeviceResponse toResponse(Device d, UUID currentDeviceId) {

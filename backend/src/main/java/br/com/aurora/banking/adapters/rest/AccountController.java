@@ -89,7 +89,7 @@ public class AccountController {
                         .toList(),
                 banking.statement(me.userId(), null, null, null, null, 5)
                         .stream().map(TxView::of).toList(),
-                banking.sumDebits(me.userId(), monthStart, clock.today()).cents(),
+                banking.totalSpending(me.userId(), monthStart, clock.today()).cents(),
                 (int) banking.listNotifications(me.userId()).stream()
                         .filter(n -> !n.read()).count());
     }

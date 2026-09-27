@@ -64,8 +64,8 @@ public class AuthenticationFilter extends OncePerRequestFilter {
         }
 
         var user = authenticated.get();
-        request.setAttribute(ATTRIBUTE,
-                new CurrentUser(user.userId(), user.deviceId(), user.level()));
+        request.setAttribute(ATTRIBUTE, new CurrentUser(
+                user.userId(), user.deviceId(), user.sessionId(), user.level()));
         chain.doFilter(request, response);
     }
 

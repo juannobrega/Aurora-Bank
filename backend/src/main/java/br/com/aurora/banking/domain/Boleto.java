@@ -93,23 +93,64 @@ public record Boleto(
     }
 
     /**
-     * Arrecadação (48 dígitos): quatro blocos de 11 dígitos, cada um com
-     * seu DV. O terceiro dígito indica se o valor é efetivo ou referência.
+     * Arrecadação (48 dígitos): quatro blocos de 12, cada um com 11
+     * dígitos de dado e 1 de verificação.
+     *
+     * <p>Os dados dos quatro blocos, concatenados, formam o código de
+     * barras de 44 posições — e é <b>nele</b> que o valor fica, não na
+     * linha digitável crua. Ler direto da linha atravessaria os dígitos
+     * verificadores e cobraria valor errado.
+     *
+     * <p>O terceiro dígito (identificador de valor) diz qual módulo usar
+     * na verificação: 6 e 7 usam módulo 10; 8 e 9 usam módulo 11.
      */
     private static Boleto parseArrecadacao(String d) {
         if (d.charAt(0) != '8') {
             throw new DomainException(ErrorCode.BOLETO_INVALIDO,
                     "Conta de consumo e tributo começa com 8.");
         }
-        // Cada bloco de 12 traz 11 dígitos de dado e 1 de verificação.
+
+        char valueId = d.charAt(2);
+        boolean useMod11 = valueId == '8' || valueId == '9';
+        if (valueId < '6' || valueId > '9') {
+            throw new DomainException(ErrorCode.BOLETO_INVALIDO,
+                    "Identificador de valor inválido: " + valueId + ".");
+        }
+
+        var barcode = new StringBuilder(44);
         for (int block = 0; block < 4; block++) {
             int start = block * 12;
-            checkMod10(d.substring(start, start + 11), d.charAt(start + 11),
-                    "bloco " + (block + 1));
+            String data = d.substring(start, start + 11);
+            char dv = d.charAt(start + 11);
+            if (useMod11) {
+                checkMod11(data, dv, "bloco " + (block + 1));
+            } else {
+                checkMod10(data, dv, "bloco " + (block + 1));
+            }
+            barcode.append(data);
         }
-        var amount = new Money(new BigDecimal(d.substring(4, 15)).movePointLeft(2));
-        return new Boleto(d, d.substring(1, 2), amount, null,
-                BoletoKind.ARRECADACAO, "Conta de consumo");
+
+        // No código de barras: [0]='8', [1]=segmento, [2]=id de valor,
+        // [3]=DV geral, [4..14]=valor em centavos.
+        var amount = new Money(new BigDecimal(barcode.substring(4, 15)).movePointLeft(2));
+
+        return new Boleto(d, String.valueOf(barcode.charAt(1)), amount, null,
+                BoletoKind.ARRECADACAO, segmentName(barcode.charAt(1)));
+    }
+
+    /** Nome do segmento de arrecadação (posição 2 do código de barras). */
+    private static String segmentName(char segment) {
+        return switch (segment) {
+            case '1' -> "Prefeitura";
+            case '2' -> "Saneamento";
+            case '3' -> "Energia elétrica e gás";
+            case '4' -> "Telecomunicações";
+            case '5' -> "Órgão governamental";
+            case '6' -> "Carnê";
+            case '7' -> "Multa de trânsito";
+            case '9' -> "Uso exclusivo do banco";
+            default -> "Conta de consumo";
+        };
     }
 
     /**
@@ -161,6 +202,29 @@ public record Boleto(
             weight = weight == 2 ? 1 : 2;
         }
         int dv = (10 - (sum % 10)) % 10;
+        if (dv != expected - '0') {
+            throw new DomainException(ErrorCode.BOLETO_INVALIDO,
+                    "Dígito verificador do " + label + " não confere.");
+        }
+    }
+
+    /**
+     * Módulo 11 da FEBRABAN para arrecadação: pesos de 2 a 9 cíclicos da
+     * direita para a esquerda. Resto 0 ou 1 resulta em DV 0; resto 10
+     * resulta em DV 1.
+     */
+    static void checkMod11(String block, char expected, String label) {
+        int sum = 0, weight = 2;
+        for (int i = block.length() - 1; i >= 0; i--) {
+            sum += (block.charAt(i) - '0') * weight;
+            weight = weight == 9 ? 2 : weight + 1;
+        }
+        int rest = sum % 11;
+        int dv = switch (rest) {
+            case 0, 1 -> 0;
+            case 10 -> 1;
+            default -> 11 - rest;
+        };
         if (dv != expected - '0') {
             throw new DomainException(ErrorCode.BOLETO_INVALIDO,
                     "Dígito verificador do " + label + " não confere.");

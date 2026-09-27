@@ -109,6 +109,13 @@ public class OnboardingService {
         var user = users.findById(cmd.userId())
                 .orElseThrow(() -> new DomainException(ErrorCode.USUARIO_NAO_ENCONTRADO));
 
+        // Só uma conta recém-aberta chega aqui. Sem esta checagem, este
+        // endpoint público reativaria uma conta bloqueada ou encerrada e
+        // abriria uma segunda conta corrente para quem já tem uma.
+        if (user.status() != UserStatus.PENDING_KYC) {
+            throw new DomainException(ErrorCode.BIOMETRIA_JA_CADASTRADA,
+                    "Esta conta já passou pela validação facial.");
+        }
         if (users.findActiveEnrollment(user.id()).isPresent()) {
             throw new DomainException(ErrorCode.BIOMETRIA_JA_CADASTRADA);
         }

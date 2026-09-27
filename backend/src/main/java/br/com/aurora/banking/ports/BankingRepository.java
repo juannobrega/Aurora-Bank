@@ -26,6 +26,15 @@ public interface BankingRepository {
     Money sumDebits(UUID userId, LocalDate from, LocalDate to);
     List<CategoryTotal> spendingByCategory(UUID userId, LocalDate from, LocalDate to);
 
+    /**
+     * Gasto do período: só categorias de despesa.
+     *
+     * <p>Diferente de {@code sumDebits}, que soma toda saída. Guardar no
+     * cofrinho ou investir é saída de caixa, mas não é gasto — o dinheiro
+     * continua seu, e contá-lo no orçamento mensal seria enganoso.
+     */
+    Money totalSpending(UUID userId, LocalDate from, LocalDate to);
+
     record CategoryTotal(TxCategory category, Money total) {}
 
     // Cofrinhos

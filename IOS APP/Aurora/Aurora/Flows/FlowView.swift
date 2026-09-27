@@ -150,10 +150,21 @@ struct FlowView: View {
                     .padding(.horizontal, Theme.Space.gutter)
                 }
             }
-            PrimaryButton(title: session.flow.confirmCallToAction) {
+            // Fluxos sem passo de valor (boleto, empréstimo) só passam por
+            // aqui — sem consultar a validação, um boleto acima do saldo
+            // seguiria adiante e deixaria a conta negativa.
+            let check = session.flow.validate(entered: session.entered,
+                                              context: model.flowContext)
+            PrimaryButton(title: session.flow.confirmCallToAction,
+                          enabled: check.isValid) {
                 session.advance()
             }
             .padding(Theme.Space.gutter)
+            if !check.isValid, !check.hint.isEmpty {
+                Text(check.hint)
+                    .font(.auroraCaption).foregroundStyle(Theme.danger)
+                    .padding(.bottom, Theme.Space.md)
+            }
         }
     }
 

@@ -6,6 +6,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.List;
@@ -76,6 +78,55 @@ public class JdbcUserRepository implements UserRepository {
         var rows = jdbc.queryForList("SELECT pin_hash FROM users WHERE id = :id",
                 Map.of("id", userId), String.class);
         return rows.stream().findFirst();
+    }
+
+    @Override
+    public LockState lockState(UUID userId) {
+        return jdbc.query("""
+            SELECT failed_pin_attempts, locked_until FROM users WHERE id = :id
+            """, Map.of("id", userId),
+            (rs, n) -> new LockState(rs.getInt("failed_pin_attempts"),
+                    rs.getTimestamp("locked_until") == null ? null
+                            : rs.getTimestamp("locked_until").toInstant()))
+            .stream().findFirst().orElse(new LockState(0, null));
+    }
+
+    /**
+     * Conta a tentativa errada e bloqueia ao atingir o limite.
+     *
+     * <p>{@code REQUIRES_NEW} é essencial: o chamador lança
+     * {@code PIN_INCORRETO} logo em seguida, e numa transação compartilhada
+     * o rollback desfaria este incremento — o contador nunca sairia de zero
+     * e o bloqueio jamais aconteceria.
+     *
+     * <p>O incremento e a decisão de bloquear ficam no mesmo UPDATE para
+     * que tentativas simultâneas não se percam.
+     */
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void registerFailedPin(UUID userId, int maxAttempts, java.time.Duration lockFor) {
+        jdbc.update("""
+            UPDATE users
+               SET failed_pin_attempts = failed_pin_attempts + 1,
+                   locked_until = CASE
+                       WHEN failed_pin_attempts + 1 >= :max
+                       THEN now() + (:seconds || ' seconds')::interval
+                       ELSE locked_until END,
+                   updated_at = now()
+             WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", userId)
+                .addValue("max", maxAttempts)
+                .addValue("seconds", lockFor.toSeconds()));
+    }
+
+    @Override
+    public void clearFailedPin(UUID userId) {
+        jdbc.update("""
+            UPDATE users SET failed_pin_attempts = 0, locked_until = NULL
+             WHERE id = :id AND (failed_pin_attempts > 0 OR locked_until IS NOT NULL)
+            """, Map.of("id", userId));
     }
 
     @Override
@@ -174,13 +225,16 @@ public class JdbcUserRepository implements UserRepository {
     }
 
     @Override
-    public void updateDeviceStatus(UUID deviceId, DeviceStatus status) {
-        jdbc.update("""
+    public boolean updateDeviceStatus(UUID userId, UUID deviceId, DeviceStatus status) {
+        // O filtro por user_id é o que impede revogar o aparelho de outra
+        // pessoa conhecendo só o id dele.
+        int affected = jdbc.update("""
             UPDATE devices
                SET status = CAST(:status AS device_status),
                    revoked_at = CASE WHEN :status = 'REVOKED' THEN now() ELSE revoked_at END
-             WHERE id = :id
-            """, Map.of("id", deviceId, "status", status.name()));
+             WHERE id = :id AND user_id = :user
+            """, Map.of("id", deviceId, "user", userId, "status", status.name()));
+        return affected > 0;
     }
 
     @Override

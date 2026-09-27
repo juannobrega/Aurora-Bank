@@ -20,6 +20,8 @@ public enum ErrorCode {
         "Saldo insuficiente."),
     LIMITE_NOTURNO_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY,
         "Valor acima do limite noturno."),
+    PIX_PARA_SI_MESMO(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Esta chave é sua. Escolha outro destinatário."),
 
     // Identidade e biometria
     CPF_INVALIDO(HttpStatus.BAD_REQUEST,
@@ -56,6 +58,8 @@ public enum ErrorCode {
         "O acesso deste aparelho foi revogado."),
     SESSAO_EXPIRADA(HttpStatus.UNAUTHORIZED,
         "Sua sessão expirou. Entre novamente."),
+    AUTENTICACAO_FRACA(HttpStatus.FORBIDDEN,
+        "Confirme seu PIN ou biometria para concluir esta operação."),
 
     // Pagamentos
     BOLETO_INVALIDO(HttpStatus.BAD_REQUEST,

@@ -2,6 +2,7 @@ package br.com.aurora.banking.application;
 
 import br.com.aurora.banking.domain.*;
 import br.com.aurora.banking.ports.BankingRepository;
+import br.com.aurora.ledger.domain.Entry;
 import br.com.aurora.ledger.domain.LedgerRepository;
 import br.com.aurora.ledger.domain.LedgerTransaction;
 import br.com.aurora.shared.error.DomainException;
@@ -11,6 +12,7 @@ import br.com.aurora.shared.time.AuroraClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -63,6 +65,56 @@ public class MoneyMover {
                 ledgerTx.id(), t.userId(), t.title(), t.counterparty(),
                 t.category(), t.method(), t.isCreditForUser(), t.amount(),
                 ledgerTx.id().toString(), clock.instant(), t.note());
+        banking.saveDetails(tx);
+        return tx;
+    }
+
+    /** Uma perna avulsa, para transações que não são de A para B. */
+    public record Leg(UUID accountId, boolean isDebit, Money amount) {
+        public static Leg debit(UUID accountId, Money amount) {
+            return new Leg(accountId, true, amount);
+        }
+        public static Leg credit(UUID accountId, Money amount) {
+            return new Leg(accountId, false, amount);
+        }
+    }
+
+    /**
+     * Transação de mais de duas pernas.
+     *
+     * @param displayAmount valor que aparece no extrato, que pode diferir
+     *        da soma das pernas (pagar fatura debita duas contas do mesmo
+     *        valor, mas o usuário gastou uma vez só)
+     */
+    public record MultiTransfer(UUID userId, List<Leg> legs, String kind,
+                                String title, String counterparty,
+                                TxCategory category, TxMethod method,
+                                boolean isCreditForUser, Money displayAmount,
+                                String note) {}
+
+    /**
+     * Executa uma transação de várias pernas, gravando <b>um só</b>
+     * registro no extrato.
+     */
+    @Transactional
+    public BankTransaction moveMany(MultiTransfer t) {
+        for (Leg leg : t.legs()) {
+            if (leg.isDebit()) requireFunds(leg.accountId(), leg.amount());
+        }
+
+        var entries = t.legs().stream()
+                .map(leg -> leg.isDebit()
+                        ? Entry.debit(leg.accountId(), leg.amount())
+                        : Entry.credit(leg.accountId(), leg.amount()))
+                .toList();
+
+        var ledgerTx = LedgerTransaction.of(t.userId(), t.kind(), t.counterparty(),
+                clock.instant(), entries);
+        ledger.append(ledgerTx);
+
+        var tx = new BankTransaction(ledgerTx.id(), t.userId(), t.title(),
+                t.counterparty(), t.category(), t.method(), t.isCreditForUser(),
+                t.displayAmount(), ledgerTx.id().toString(), clock.instant(), t.note());
         banking.saveDetails(tx);
         return tx;
     }

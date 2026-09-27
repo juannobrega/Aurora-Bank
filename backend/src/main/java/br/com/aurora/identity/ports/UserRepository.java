@@ -16,6 +16,22 @@ public interface UserRepository {
     Optional<User> findById(UUID id);
     Optional<User> findByCpf(String cpf);
     Optional<String> findPinHash(UUID userId);
+
+    /** Tentativas erradas acumuladas e até quando a conta está bloqueada. */
+    LockState lockState(UUID userId);
+    /**
+     * Registra a tentativa errada. Roda em transação própria: o login
+     * falho lança exceção, e sem isso o rollback apagaria o incremento —
+     * deixando o contador eternamente em zero.
+     */
+    void registerFailedPin(UUID userId, int maxAttempts, java.time.Duration lockFor);
+    void clearFailedPin(UUID userId);
+
+    record LockState(int failedAttempts, java.time.Instant lockedUntil) {
+        public boolean isLocked(java.time.Instant now) {
+            return lockedUntil != null && lockedUntil.isAfter(now);
+        }
+    }
     boolean existsByCpf(String cpf);
     boolean existsByEmail(String email);
 
@@ -31,7 +47,8 @@ public interface UserRepository {
 
     // Dispositivos
     void saveDevice(Device device);
-    void updateDeviceStatus(UUID deviceId, DeviceStatus status);
+    /** Só altera se o aparelho pertencer ao usuário — evita IDOR. */
+    boolean updateDeviceStatus(UUID userId, UUID deviceId, DeviceStatus status);
     void touchDevice(UUID deviceId);
     Optional<Device> findDevice(UUID userId, String hardwareId);
     List<Device> listDevices(UUID userId);

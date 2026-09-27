@@ -50,6 +50,7 @@ public class TransactionController {
     @PostMapping("/pix/send")
     @Operation(summary = "Envia Pix")
     public TxView sendPix(CurrentUser me, @Valid @RequestBody PixSendRequest r) {
+        me.requireStrongAuth();
         return TxView.of(pix.send(new PixService.SendCommand(
                 me.userId(), r.pixKey(), Money.ofCents(r.amountCents()), r.note())));
     }
@@ -112,6 +113,7 @@ public class TransactionController {
     @Operation(summary = "Guarda no cofrinho")
     public TxView deposit(CurrentUser me, @PathVariable UUID goalId,
                           @Valid @RequestBody AmountRequest r) {
+        me.requireStrongAuth();
         return TxView.of(goals.deposit(me.userId(), goalId, Money.ofCents(r.amountCents())));
     }
 
@@ -119,12 +121,14 @@ public class TransactionController {
     @Operation(summary = "Resgata do cofrinho")
     public TxView withdraw(CurrentUser me, @PathVariable UUID goalId,
                            @Valid @RequestBody AmountRequest r) {
+        me.requireStrongAuth();
         return TxView.of(goals.withdraw(me.userId(), goalId, Money.ofCents(r.amountCents())));
     }
 
     @DeleteMapping("/goals/{goalId}")
     @Operation(summary = "Exclui cofrinho e devolve o guardado")
     public void deleteGoal(CurrentUser me, @PathVariable UUID goalId) {
+        me.requireStrongAuth();
         goals.delete(me.userId(), goalId);
     }
 
@@ -146,6 +150,7 @@ public class TransactionController {
     @Operation(summary = "Aplica")
     public TxView invest(CurrentUser me, @PathVariable String productId,
                          @Valid @RequestBody AmountRequest r) {
+        me.requireStrongAuth();
         return TxView.of(investments.invest(me.userId(), productId,
                 Money.ofCents(r.amountCents())));
     }
@@ -154,6 +159,7 @@ public class TransactionController {
     @Operation(summary = "Resgata")
     public TxView redeem(CurrentUser me, @PathVariable String productId,
                          @Valid @RequestBody AmountRequest r) {
+        me.requireStrongAuth();
         return TxView.of(investments.redeem(me.userId(), productId,
                 Money.ofCents(r.amountCents())));
     }
@@ -173,6 +179,7 @@ public class TransactionController {
     @Operation(summary = "Registra compra no crédito",
                description = "Não toca a conta corrente: engorda a fatura.")
     public TxView purchase(CurrentUser me, @Valid @RequestBody PurchaseRequest r) {
+        me.requireStrongAuth();
         var category = r.category() == null ? TxCategory.outros
                 : TxCategory.valueOf(r.category());
         return TxView.of(cards.purchase(me.userId(), Money.ofCents(r.amountCents()),
@@ -182,6 +189,7 @@ public class TransactionController {
     @PostMapping("/card/invoice/pay")
     @Operation(summary = "Paga a fatura com o saldo")
     public TxView payInvoice(CurrentUser me) {
+        me.requireStrongAuth();
         return TxView.of(cards.payInvoice(me.userId()));
     }
 
@@ -193,6 +201,7 @@ public class TransactionController {
     @Operation(summary = "Ajustes do cartão")
     public CardService.CardView updateCard(CurrentUser me,
                                            @RequestBody CardSettingsRequest r) {
+        me.requireStrongAuth();
         cards.updateSettings(me.userId(), r.blocked(),
                 r.creditLimitCents() == null ? null : Money.ofCents(r.creditLimitCents()),
                 r.contactless(), r.onlinePurchases(), r.international());
@@ -222,6 +231,7 @@ public class TransactionController {
     @Operation(summary = "Contrata empréstimo",
                description = "Credita a conta e gera as parcelas devidas.")
     public LoanView contract(CurrentUser me, @Valid @RequestBody ContractRequest r) {
+        me.requireStrongAuth();
         return toView(loans.contract(me.userId(), Money.ofCents(r.amountCents()), r.months()));
     }
 
@@ -234,6 +244,7 @@ public class TransactionController {
     @PostMapping("/credit/loans/{loanId}/pay")
     @Operation(summary = "Paga a próxima parcela")
     public TxView payInstallment(CurrentUser me, @PathVariable UUID loanId) {
+        me.requireStrongAuth();
         return TxView.of(loans.payNextInstallment(me.userId(), loanId));
     }
 

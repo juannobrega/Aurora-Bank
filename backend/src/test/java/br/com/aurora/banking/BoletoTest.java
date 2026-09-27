@@ -106,6 +106,71 @@ class BoletoTest {
         assertThat(Boleto.parse(line(0, 5000), LocalDate.of(2026, 1, 1)).dueDate()).isNull();
     }
 
+    // ------------------------------------------------- arrecadação (48)
+
+    /** Monta uma linha de arrecadação válida para um dado valor. */
+    private static String arrecadacao(char valueId, long cents) {
+        // Código de barras: 8 + segmento + idValor + DV + valor(11) + livre(30)
+        String barcode = "8" + "3" + valueId + "0"
+                + String.format("%011d", cents) + "0".repeat(30);
+        boolean mod11 = valueId == '8' || valueId == '9';
+
+        var line = new StringBuilder(48);
+        for (int b = 0; b < 4; b++) {
+            String data = barcode.substring(b * 11, b * 11 + 11);
+            line.append(data).append(mod11 ? mod11Dv(data) : mod10(data));
+        }
+        return line.toString();
+    }
+
+    private static int mod11Dv(String block) {
+        int sum = 0, weight = 2;
+        for (int i = block.length() - 1; i >= 0; i--) {
+            sum += (block.charAt(i) - '0') * weight;
+            weight = weight == 9 ? 2 : weight + 1;
+        }
+        int rest = sum % 11;
+        return switch (rest) { case 0, 1 -> 0; case 10 -> 1; default -> 11 - rest; };
+    }
+
+    @Test
+    @DisplayName("Arrecadação com módulo 10: valor vem do código de barras")
+    void arrecadacaoMod10() {
+        // O valor fica no código de barras remontado, não na linha crua —
+        // ler direto da linha atravessaria os dígitos verificadores.
+        var boleto = Boleto.parse(arrecadacao('6', 18740));
+
+        assertThat(boleto.kind()).isEqualTo(Boleto.BoletoKind.ARRECADACAO);
+        assertThat(boleto.amount()).isEqualTo(Money.of("187.40"));
+        assertThat(boleto.payee()).isEqualTo("Energia elétrica e gás");
+    }
+
+    @Test
+    @DisplayName("Arrecadação com módulo 11 é aceita")
+    void arrecadacaoMod11() {
+        // Identificador 8 exige módulo 11; com módulo 10 seria recusada.
+        var boleto = Boleto.parse(arrecadacao('8', 9420));
+        assertThat(boleto.amount()).isEqualTo(Money.of("94.20"));
+    }
+
+    @Test
+    @DisplayName("Arrecadação com DV errado é recusada")
+    void arrecadacaoDvErrado() {
+        var chars = arrecadacao('6', 18740).toCharArray();
+        chars[11] = chars[11] == '0' ? '1' : '0';    // DV do primeiro bloco
+
+        assertThatThrownBy(() -> Boleto.parse(new String(chars)))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("bloco 1");
+    }
+
+    @Test
+    @DisplayName("Identificador de valor inválido é recusado")
+    void arrecadacaoIdInvalido() {
+        assertThatThrownBy(() -> Boleto.parse(arrecadacao('1', 1000)))
+                .isInstanceOf(DomainException.class);
+    }
+
     @Test
     @DisplayName("Boleto vencido é identificado")
     void identificaVencido() {

@@ -40,6 +40,7 @@ public class JdbcBankingRepository implements BankingRepository {
         return jdbc.query("""
             SELECT id FROM accounts
              WHERE owner_id = :user AND type = 'CHECKING' AND closed_at IS NULL
+             ORDER BY created_at
              LIMIT 1
             """, Map.of("user", userId), (rs, n) -> rs.getObject("id", UUID.class))
             .stream().findFirst()
@@ -151,6 +152,13 @@ public class JdbcBankingRepository implements BankingRepository {
                 .addValue("to", to == null ? null : Date.valueOf(to)),
             BigDecimal.class);
         return new Money(total == null ? BigDecimal.ZERO : total);
+    }
+
+    @Override
+    public Money totalSpending(UUID userId, LocalDate from, LocalDate to) {
+        return spendingByCategory(userId, from, to).stream()
+                .map(CategoryTotal::total)
+                .reduce(Money.ZERO, Money::plus);
     }
 
     /**

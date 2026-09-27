@@ -51,6 +51,7 @@ public class PaymentController {
     @PostMapping("/boleto/pay")
     @Operation(summary = "Paga o boleto")
     public TxView payBoleto(CurrentUser me, @Valid @RequestBody LineRequest r) {
+        me.requireStrongAuth();
         return TxView.of(payments.payBoleto(me.userId(), r.digitableLine()));
     }
 
@@ -73,6 +74,7 @@ public class PaymentController {
     @PostMapping("/recharge")
     @Operation(summary = "Recarrega o celular")
     public TxView recharge(CurrentUser me, @Valid @RequestBody RechargeRequest r) {
+        me.requireStrongAuth();
         return TxView.of(payments.recharge(me.userId(), r.phone(),
                 Money.ofCents(r.amountCents())));
     }

@@ -9,7 +9,7 @@ import br.com.aurora.shared.money.Money;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -80,18 +80,18 @@ public class CardService {
                     "Não há fatura em aberto.");
         }
         // A fatura é o saldo CREDOR do passivo do cartão: cada compra o
-        // credita. Pagar precisa DEBITAR esse passivo (zerando-o) e debitar
-        // também a conta corrente — daí a perna de liquidação no meio, que
-        // mantém a transação balanceada.
-        mover.move(new MoneyMover.Transfer(
-                userId, banking.checkingAccountOf(userId), banking.settlementAccount(),
-                invoice, "PAGAMENTO_FATURA_SAIDA", "Pagamento de fatura",
-                "Cartão Aurora", TxCategory.credito, TxMethod.credito, false, null));
-
-        return mover.move(new MoneyMover.Transfer(
-                userId, card.liabilityAccountId(), banking.settlementAccount(),
-                invoice, "PAGAMENTO_FATURA", "Fatura quitada", "Cartão Aurora",
-                TxCategory.credito, TxMethod.credito, false, null));
+        // credita, e pagar precisa DEBITÁ-LO. Ao mesmo tempo o dinheiro sai
+        // da conta corrente. São três pernas numa transação só — fazer duas
+        // transferências separadas gravaria dois débitos no extrato e
+        // dobraria o gasto do mês.
+        return mover.moveMany(new MoneyMover.MultiTransfer(
+                userId,
+                List.of(MoneyMover.Leg.debit(banking.checkingAccountOf(userId), invoice),
+                        MoneyMover.Leg.debit(card.liabilityAccountId(), invoice),
+                        MoneyMover.Leg.credit(banking.settlementAccount(),
+                                              invoice.plus(invoice))),
+                "PAGAMENTO_FATURA", "Pagamento de fatura", "Cartão Aurora",
+                TxCategory.credito, TxMethod.credito, false, invoice, null));
     }
 
     @Transactional
