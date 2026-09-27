@@ -55,6 +55,14 @@ public class PaymentController {
         return TxView.of(payments.payBoleto(me.userId(), r.digitableLine()));
     }
 
+    @PostMapping("/tributo/pay")
+    @Operation(summary = "Paga tributo ou conta de consumo",
+               description = "IPVA, IPTU, DARF e contas de consumo (linha de arrecadação).")
+    public TxView payTributo(CurrentUser me, @Valid @RequestBody LineRequest r) {
+        me.requireStrongAuth();
+        return TxView.of(payments.payTributo(me.userId(), r.digitableLine()));
+    }
+
     // ------------------------------------------------------------ recarga
 
     public record PhoneRequest(@NotBlank String phone) {}

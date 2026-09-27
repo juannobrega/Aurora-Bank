@@ -30,6 +30,21 @@ public class PaymentService {
         return Boleto.parse(digitableLine);
     }
 
+    /**
+     * Paga tributo ou conta de consumo. É o mesmo mecanismo do boleto, mas
+     * restrito a linhas de arrecadação (48 dígitos, começa com 8) — que é o
+     * que IPVA, IPTU e contas de consumo usam.
+     */
+    @Transactional
+    public BankTransaction payTributo(UUID userId, String digitableLine) {
+        var boleto = Boleto.parse(digitableLine);
+        if (boleto.kind() != Boleto.BoletoKind.ARRECADACAO) {
+            throw new DomainException(ErrorCode.BOLETO_INVALIDO,
+                    "Esta linha não é de tributo ou conta de consumo.");
+        }
+        return payBoleto(userId, digitableLine);
+    }
+
     @Transactional
     public BankTransaction payBoleto(UUID userId, String digitableLine) {
         var boleto = Boleto.parse(digitableLine);

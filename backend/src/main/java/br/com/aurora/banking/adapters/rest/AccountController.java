@@ -204,4 +204,22 @@ public class AccountController {
     public void markRead(CurrentUser me) {
         banking.markAllRead(me.userId());
     }
+
+    // ---------------------------------------------------- consentimentos LGPD
+
+    @GetMapping("/account/consents")
+    @Operation(summary = "Meus consentimentos (LGPD)")
+    public List<BankingRepository.ConsentRow> consents(CurrentUser me) {
+        return banking.listConsents(me.userId());
+    }
+
+    public record ConsentRequest(String kind, boolean granted) {}
+
+    @PutMapping("/account/consents")
+    @Operation(summary = "Concede ou revoga um consentimento")
+    public List<BankingRepository.ConsentRow> setConsent(CurrentUser me,
+                                                         @RequestBody ConsentRequest r) {
+        banking.setConsent(me.userId(), r.kind(), r.granted());
+        return banking.listConsents(me.userId());
+    }
 }

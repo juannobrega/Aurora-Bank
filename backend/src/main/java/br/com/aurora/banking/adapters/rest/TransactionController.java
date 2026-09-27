@@ -82,6 +82,29 @@ public class TransactionController {
         return banking.listContacts(me.userId(), 10);
     }
 
+    public record ChargeRequest(Long amountCents, String description) {}
+
+    @PostMapping("/pix/charges")
+    @Operation(summary = "Cria uma cobrança Pix (o QR)")
+    public BankingRepository.PixChargeRow createCharge(CurrentUser me,
+                                                       @RequestBody ChargeRequest r) {
+        var amount = r.amountCents() == null ? null : Money.ofCents(r.amountCents());
+        return pix.createCharge(new PixService.ChargeCommand(me.userId(), amount, r.description()));
+    }
+
+    @GetMapping("/pix/charges")
+    @Operation(summary = "Minhas cobranças Pix")
+    public List<BankingRepository.PixChargeRow> charges(CurrentUser me) {
+        return pix.charges(me.userId());
+    }
+
+    @PostMapping("/pix/{transactionId}/refund")
+    @Operation(summary = "Devolve um Pix recebido (MED)")
+    public TxView refund(CurrentUser me, @PathVariable UUID transactionId) {
+        me.requireStrongAuth();
+        return TxView.of(pix.refund(me.userId(), transactionId));
+    }
+
     // ---------------------------------------------------------- cofrinhos
 
     public record GoalRequest(@NotBlank String name, @Positive long targetCents,

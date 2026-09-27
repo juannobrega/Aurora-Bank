@@ -91,6 +91,26 @@ public interface BankingRepository {
     boolean isBoletoPaid(String digitableLine);
     void recordBoletoPayment(String digitableLine, UUID transactionId);
 
+    // Atendimento
+    String openTicket(UUID userId, String channel, String subject);
+    List<TicketRow> listTickets(UUID userId);
+    record TicketRow(UUID id, String channel, String subject, String status,
+                     String protocol, java.time.Instant createdAt) {}
+
+    // Cobrança Pix e devolução (MED)
+    void savePixCharge(UUID id, UUID userId, String pixKey, Money amount,
+                       String description, String txid);
+    List<PixChargeRow> listPixCharges(UUID userId);
+    record PixChargeRow(UUID id, String pixKey, Money amount, String description,
+                        String txid, boolean paid, java.time.Instant createdAt) {}
+
+    void markRefunded(UUID originalTxId, UUID refundTxId);
+
+    // Consentimentos LGPD
+    void setConsent(UUID userId, String kind, boolean granted);
+    List<ConsentRow> listConsents(UUID userId);
+    record ConsentRow(String kind, boolean granted, java.time.Instant createdAt) {}
+
     // Notificações
     void notify(UUID userId, String kind, String title, String message);
     List<NotificationRow> listNotifications(UUID userId);

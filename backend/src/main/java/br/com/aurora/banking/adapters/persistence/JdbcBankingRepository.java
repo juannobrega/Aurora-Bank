@@ -488,6 +488,90 @@ public class JdbcBankingRepository implements BankingRepository {
             """, Map.of("line", digitableLine, "tx", transactionId));
     }
 
+    // ---------------------------------------------------------- atendimento
+
+    @Override
+    public String openTicket(UUID userId, String channel, String subject) {
+        // Protocolo curto e legível, do tipo que o cliente anota.
+        String protocol = "AUR" + java.time.Year.now().getValue()
+                + String.format("%06d", Math.abs(UUID.randomUUID().hashCode()) % 1_000_000);
+        jdbc.update("""
+            INSERT INTO support_tickets (id, user_id, channel, subject, protocol)
+            VALUES (:id, :user, CAST(:ch AS ticket_channel), :subject, :proto)
+            """,
+            Map.of("id", UUID.randomUUID(), "user", userId, "ch", channel,
+                   "subject", subject, "proto", protocol));
+        return protocol;
+    }
+
+    @Override
+    public List<TicketRow> listTickets(UUID userId) {
+        return jdbc.query("""
+            SELECT * FROM support_tickets WHERE user_id = :user ORDER BY created_at DESC
+            """, Map.of("user", userId),
+            (rs, n) -> new TicketRow(rs.getObject("id", UUID.class),
+                    rs.getString("channel"), rs.getString("subject"),
+                    rs.getString("status"), rs.getString("protocol"),
+                    rs.getTimestamp("created_at").toInstant()));
+    }
+
+    // ----------------------------------------------------- cobrança Pix / MED
+
+    @Override
+    public void savePixCharge(UUID id, UUID userId, String pixKey, Money amount,
+                              String description, String txid) {
+        jdbc.update("""
+            INSERT INTO pix_charges (id, user_id, pix_key, amount, description, txid)
+            VALUES (:id, :user, :key, :amount, :desc, :txid)
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", id).addValue("user", userId).addValue("key", pixKey)
+                .addValue("amount", amount == null ? null : amount.amount())
+                .addValue("desc", description).addValue("txid", txid));
+    }
+
+    @Override
+    public List<PixChargeRow> listPixCharges(UUID userId) {
+        return jdbc.query("""
+            SELECT * FROM pix_charges WHERE user_id = :user ORDER BY created_at DESC LIMIT 50
+            """, Map.of("user", userId),
+            (rs, n) -> new PixChargeRow(rs.getObject("id", UUID.class),
+                    rs.getString("pix_key"),
+                    rs.getBigDecimal("amount") == null ? null : new Money(rs.getBigDecimal("amount")),
+                    rs.getString("description"), rs.getString("txid"),
+                    rs.getTimestamp("paid_at") != null,
+                    rs.getTimestamp("created_at").toInstant()));
+    }
+
+    @Override
+    public void markRefunded(UUID originalTxId, UUID refundTxId) {
+        jdbc.update("UPDATE tx_details SET refunded_tx_id = :refund WHERE transaction_id = :orig",
+                Map.of("refund", refundTxId, "orig", originalTxId));
+    }
+
+    // ------------------------------------------------------- consentimentos
+
+    @Override
+    public void setConsent(UUID userId, String kind, boolean granted) {
+        jdbc.update("""
+            INSERT INTO consents (id, user_id, kind, granted)
+            VALUES (:id, :user, :kind, :granted)
+            """,
+            Map.of("id", UUID.randomUUID(), "user", userId, "kind", kind, "granted", granted));
+    }
+
+    @Override
+    public List<ConsentRow> listConsents(UUID userId) {
+        // O estado atual de cada tipo é o registro mais recente dele.
+        return jdbc.query("""
+            SELECT DISTINCT ON (kind) kind, granted, created_at
+              FROM consents WHERE user_id = :user
+             ORDER BY kind, created_at DESC
+            """, Map.of("user", userId),
+            (rs, n) -> new ConsentRow(rs.getString("kind"), rs.getBoolean("granted"),
+                    rs.getTimestamp("created_at").toInstant()));
+    }
+
     // -------------------------------------------------------- notificações
 
     @Override

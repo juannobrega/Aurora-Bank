@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
+import br.com.aurora.banking.ports.BankingRepository;
 import java.util.List;
 import java.util.UUID;
 
@@ -93,6 +94,48 @@ public class PixService {
     @Transactional
     public void deleteKey(UUID userId, UUID keyId) {
         banking.deletePixKey(userId, keyId);
+    }
+
+    public record ChargeCommand(UUID userId, Money amount, String description) {}
+
+    /** Registra uma cobrança Pix (a que vira o QR no app). */
+    @Transactional
+    public BankingRepository.PixChargeRow createCharge(ChargeCommand cmd) {
+        var key = banking.listPixKeys(cmd.userId()).stream().findFirst()
+                .orElseThrow(() -> new DomainException(ErrorCode.BIOMETRIA_NAO_CADASTRADA,
+                        "Cadastre uma chave Pix antes de cobrar."));
+        var id = UUID.randomUUID();
+        String txid = "AUR" + id.toString().replace("-", "").substring(0, 20).toUpperCase();
+        banking.savePixCharge(id, cmd.userId(), key.value(), cmd.amount(),
+                cmd.description(), txid);
+        return new BankingRepository.PixChargeRow(id, key.value(), cmd.amount(),
+                cmd.description(), txid, false, java.time.Instant.now());
+    }
+
+    public List<BankingRepository.PixChargeRow> charges(UUID userId) {
+        return banking.listPixCharges(userId);
+    }
+
+    /**
+     * Devolução de Pix (MED). Estorna um Pix recebido: o dinheiro sai da
+     * conta de quem recebeu e volta pela liquidação.
+     */
+    @Transactional
+    public BankTransaction refund(UUID userId, UUID originalTxId) {
+        var original = banking.findTransaction(userId, originalTxId)
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Transação não encontrada."));
+        if (original.method() != TxMethod.pix || !original.isCredit()) {
+            throw new DomainException(ErrorCode.PIX_NAO_DEVOLVIVEL,
+                    "Só um Pix recebido pode ser devolvido.");
+        }
+        var tx = mover.move(new MoneyMover.Transfer(
+                userId, banking.checkingAccountOf(userId), banking.settlementAccount(),
+                original.amount(), "PIX_DEVOLVIDO", "Devolução de Pix",
+                original.counterparty(), TxCategory.transferencia, TxMethod.pix,
+                false, "MED: devolução de " + original.authCode()));
+        banking.markRefunded(originalTxId, tx.id());
+        return tx;
     }
 
     private boolean isNight() {

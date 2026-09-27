@@ -22,6 +22,8 @@ public enum ErrorCode {
         "Valor acima do limite noturno."),
     PIX_PARA_SI_MESMO(HttpStatus.UNPROCESSABLE_ENTITY,
         "Esta chave é sua. Escolha outro destinatário."),
+    PIX_NAO_DEVOLVIVEL(HttpStatus.UNPROCESSABLE_ENTITY,
+        "Só um Pix recebido pode ser devolvido."),
 
     // Identidade e biometria
     CPF_INVALIDO(HttpStatus.BAD_REQUEST,
