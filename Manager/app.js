@@ -117,11 +117,12 @@ function PendingLoans({ apiKey, loans, onDecided }) {
 
   if (!loans.length) return null;   // some quando não há nada em análise
 
-  const head = ['Cliente', 'Valor', 'Parcelas', 'Pedido', 'Decisão'].map((c, i) =>
-    h('th', { key: i, style: i === 4 ? { textAlign: 'right' } : null }, c));
+  const head = ['Cliente', 'Produto', 'Valor', 'Parcelas', 'Pedido', 'Decisão'].map((c, i) =>
+    h('th', { key: i, style: i === 5 ? { textAlign: 'right' } : null }, c));
 
   const row = l => h('tr', { key: l.id },
     h('td', null, l.userName),
+    h('td', { className: 'updated' }, l.product || 'Empréstimo'),
     h('td', { className: 'num' }, fromCents(l.principalCents)),
     h('td', { className: 'mono' }, l.installments + 'x ' + fromCents(l.paymentCents)),
     h('td', { className: 'updated' }, relTime(l.requestedAt)),

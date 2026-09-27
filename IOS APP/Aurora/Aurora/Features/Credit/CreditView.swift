@@ -2,20 +2,24 @@ import SwiftUI
 
 struct CreditView: View {
     @Environment(AppModel.self) private var model
+    @State private var product: CreditProduct = .find("pessoal")
     @State private var principal: Double = 5_000
     @State private var months = 12
     @State private var activeFlow: FlowPresentation?
-    private let rate: Decimal = 0.0249
 
+    private var rate: Decimal { product.monthlyRate }
     private var payment: Money {
         Loan.payment(principal: Money(Decimal(principal)), monthlyRate: rate, months: months)
     }
+    private var minAmt: Double { NSDecimalNumber(decimal: product.minAmount.amount).doubleValue }
+    private var maxAmt: Double { NSDecimalNumber(decimal: product.maxAmount.amount).doubleValue }
 
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.Space.base) {
                 scoreCard
                 if !model.loans.isEmpty { contractsSection }
+                productList
                 simulator
             }
             .padding(.horizontal, Theme.Space.gutter)
@@ -25,6 +29,60 @@ struct CreditView: View {
         .auroraBackground()
         .navigationBarBackButtonHidden()
         .flowSheet($activeFlow)
+    }
+
+    // MARK: Produtos de crédito
+
+    private var productList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Produtos de crédito").font(.auroraLabel).foregroundStyle(Theme.text2)
+            ForEach(CreditProduct.all) { p in
+                Button {
+                    withAnimation(Theme.Motion.snap) {
+                        product = p
+                        // Reenquadra valor e prazo nos limites do produto.
+                        principal = min(max(principal, minAmtOf(p)), maxAmtOf(p))
+                        months = min(months, p.maxMonths)
+                    }
+                } label: { productRow(p) }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func productRow(_ p: CreditProduct) -> some View {
+        let selected = p.id == product.id
+        return HStack(spacing: 13) {
+            Image(systemName: p.symbol)
+                .font(.system(size: 16)).foregroundStyle(p.tint)
+                .frame(width: 44, height: 44)
+                .background(p.tint.tinted, in: .rect(cornerRadius: Theme.Radius.icon))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(p.name).font(.auroraBody).foregroundStyle(Theme.text)
+                Text(p.rateLabel + " · até " + String(p.maxMonths) + "x")
+                    .font(.auroraCaption).foregroundStyle(Theme.text2)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20))
+                .foregroundStyle(selected ? Theme.cyan : Theme.text3)
+        }
+        .padding(14)
+        .background(Theme.surface1, in: .rect(cornerRadius: Theme.Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
+            .stroke(selected ? Theme.cyan : Theme.line, lineWidth: selected ? 1.5 : 1))
+    }
+
+    /// Opções de prazo até o máximo do produto.
+    private var termOptions: [Int] {
+        [6, 12, 24, 36, 48, 60].filter { $0 <= product.maxMonths }
+    }
+
+    private func minAmtOf(_ p: CreditProduct) -> Double {
+        NSDecimalNumber(decimal: p.minAmount.amount).doubleValue
+    }
+    private func maxAmtOf(_ p: CreditProduct) -> Double {
+        NSDecimalNumber(decimal: p.maxAmount.amount).doubleValue
     }
 
     // MARK: Score
@@ -105,7 +163,7 @@ struct CreditView: View {
     private var simulator: some View {
         AuroraCard {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Empréstimo pessoal")
+                Text(product.name)
                     .font(.auroraHeadline).foregroundStyle(Theme.text)
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -113,13 +171,16 @@ struct CreditView: View {
                     Text(Money(Decimal(principal)).formatted)
                         .font(.mono(26, .semibold)).foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
-                    Slider(value: $principal, in: 500...20_000, step: 500).tint(Theme.cyan)
+                    Slider(value: $principal, in: minAmt...maxAmt,
+                           step: minAmt >= 1000 ? 1000 : 500).tint(product.tint)
+                    Text("De \(product.minAmount.formatted) a \(product.maxAmount.formatted)")
+                        .font(.auroraCaption).foregroundStyle(Theme.text3)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Em quantas parcelas?").font(.auroraLabel).foregroundStyle(Theme.text2)
                     HStack(spacing: 8) {
-                        ForEach([6, 12, 18, 24], id: \.self) { n in
+                        ForEach(termOptions, id: \.self) { n in
                             let on = months == n
                             Button {
                                 withAnimation(.snappy(duration: 0.2)) { months = n }
@@ -128,9 +189,9 @@ struct CreditView: View {
                                     .font(.auroraLabel)
                                     .foregroundStyle(on ? .white : Theme.text)
                                     .frame(maxWidth: .infinity).frame(height: 40)
-                                    .background(on ? Theme.cyan : .clear, in: .rect(cornerRadius: 10))
+                                    .background(on ? product.tint : .clear, in: .rect(cornerRadius: 10))
                                     .overlay(RoundedRectangle(cornerRadius: 10)
-                                        .stroke(on ? Theme.cyan : Theme.line, lineWidth: 1))
+                                        .stroke(on ? product.tint : Theme.line, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                         }
@@ -139,16 +200,16 @@ struct CreditView: View {
 
                 VStack(spacing: 0) {
                     DetailRow(label: "Parcela", value: payment.formatted)
-                    DetailRow(label: "Taxa", value: "2,49% a.m.")
-                    DetailRow(label: "Total", value: (payment * Decimal(months)).formatted)
-                    DetailRow(label: "CET", value: "34,3% a.a.", showsDivider: false)
+                    DetailRow(label: "Taxa", value: product.rateLabel)
+                    DetailRow(label: "Total", value: (payment * Decimal(months)).formatted,
+                              showsDivider: false)
                 }
 
-                PrimaryButton(title: "Contratar") {
+                PrimaryButton(title: "Pedir análise") {
                     activeFlow = .init(flow: LoanFlow(
+                        product: product,
                         principal: Money(Decimal(principal)),
-                        months: months,
-                        monthlyRate: rate
+                        months: months
                     ))
                 }
             }

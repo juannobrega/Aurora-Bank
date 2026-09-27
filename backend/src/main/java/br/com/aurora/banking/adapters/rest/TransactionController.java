@@ -291,15 +291,32 @@ public class TransactionController {
 
     // ------------------------------------------------------------ crédito
 
-    @GetMapping("/credit/simulate")
-    @Operation(summary = "Simula empréstimo")
-    public LoanService.Simulation simulate(@RequestParam long amountCents,
-                                           @RequestParam int months) {
-        return loans.simulate(Money.ofCents(amountCents), months);
+    @GetMapping("/credit/products")
+    @Operation(summary = "Produtos de crédito disponíveis")
+    public List<CreditProductView> creditProducts() {
+        return loans.products().stream()
+                .map(p -> new CreditProductView(p.id(), p.name(), p.description(),
+                        p.monthlyRate().doubleValue(), p.maxMonths(),
+                        p.minAmount().cents(), p.maxAmount().cents(), p.icon(), p.accent()))
+                .toList();
     }
 
-    public record ContractRequest(@Positive long amountCents,
-                                  @Min(1) @Max(48) int months) {}
+    public record CreditProductView(String id, String name, String description,
+                                    double monthlyRate, int maxMonths,
+                                    long minAmountCents, long maxAmountCents,
+                                    String icon, String accent) {}
+
+    @GetMapping("/credit/simulate")
+    @Operation(summary = "Simula um produto de crédito")
+    public LoanService.Simulation simulate(@RequestParam String productId,
+                                           @RequestParam long amountCents,
+                                           @RequestParam int months) {
+        return loans.simulate(productId, Money.ofCents(amountCents), months);
+    }
+
+    public record ContractRequest(@NotBlank String productId,
+                                  @Positive long amountCents,
+                                  @Min(1) @Max(60) int months) {}
 
     public record LoanView(UUID id, long principalCents, int installments,
                            long paidCount, long outstandingCents, String state,
@@ -313,7 +330,8 @@ public class TransactionController {
                description = "Credita a conta e gera as parcelas devidas.")
     public LoanView contract(CurrentUser me, @Valid @RequestBody ContractRequest r) {
         me.requireStrongAuth();
-        return toView(loans.contract(me.userId(), Money.ofCents(r.amountCents()), r.months()));
+        return toView(loans.contract(me.userId(), r.productId(),
+                Money.ofCents(r.amountCents()), r.months()));
     }
 
     @GetMapping("/credit/loans")

@@ -107,8 +107,9 @@ public class AdminController {
 
     // ── Análise de crédito ──────────────────────────────────────────────
 
-    public record PendingLoanView(String id, String userName, long principalCents,
-                                  int installments, long paymentCents, java.time.Instant requestedAt) {}
+    public record PendingLoanView(String id, String userName, String product,
+                                  long principalCents, int installments,
+                                  long paymentCents, java.time.Instant requestedAt) {}
 
     @GetMapping("/loans/pending")
     @Operation(summary = "Empréstimos aguardando análise")
@@ -117,8 +118,8 @@ public class AdminController {
         authorize(key);
         return banking.pendingLoans().stream()
                 .map(l -> new PendingLoanView(l.id().toString(), l.userName(),
-                        l.principal().cents(), l.installments(), l.payment().cents(),
-                        l.requestedAt()))
+                        l.productName(), l.principal().cents(), l.installments(),
+                        l.payment().cents(), l.requestedAt()))
                 .toList();
     }
 

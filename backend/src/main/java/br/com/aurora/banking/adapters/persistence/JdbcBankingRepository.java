@@ -380,12 +380,24 @@ public class JdbcBankingRepository implements BankingRepository {
     }
 
     @Override
-    public void saveLoan(Loan loan) {
+    public List<CreditProduct> creditProducts() {
+        return jdbc.query("SELECT * FROM credit_products ORDER BY monthly_rate",
+                Map.of(), CREDIT_PRODUCT_MAPPER);
+    }
+
+    @Override
+    public Optional<CreditProduct> creditProduct(String id) {
+        return jdbc.query("SELECT * FROM credit_products WHERE id = :id",
+                Map.of("id", id), CREDIT_PRODUCT_MAPPER).stream().findFirst();
+    }
+
+    @Override
+    public void saveLoan(Loan loan, String productId) {
         jdbc.update("""
             INSERT INTO loans (id, user_id, liability_account_id, principal,
-                               monthly_rate, installments, state, requested_at)
+                               monthly_rate, installments, state, product_id, requested_at)
             VALUES (:id, :user, :account, :principal, :rate, :count,
-                    CAST(:state AS loan_state), now())
+                    CAST(:state AS loan_state), :product, now())
             """,
             new MapSqlParameterSource()
                 .addValue("id", loan.id()).addValue("user", loan.userId())
@@ -393,7 +405,8 @@ public class JdbcBankingRepository implements BankingRepository {
                 .addValue("principal", loan.principal().amount())
                 .addValue("rate", loan.monthlyRate())
                 .addValue("count", loan.installmentCount())
-                .addValue("state", loan.state().name()));
+                .addValue("state", loan.state().name())
+                .addValue("product", productId));
 
         var batch = loan.installments().stream()
                 .map(i -> new MapSqlParameterSource()
@@ -430,8 +443,10 @@ public class JdbcBankingRepository implements BankingRepository {
     public List<PendingLoan> pendingLoans() {
         return jdbc.query("""
             SELECT l.id, l.user_id, u.full_name, l.principal, l.installments,
-                   l.monthly_rate, l.requested_at
+                   l.monthly_rate, l.requested_at,
+                   COALESCE(cp.name, 'Empréstimo') AS product_name
               FROM loans l JOIN users u ON u.id = l.user_id
+              LEFT JOIN credit_products cp ON cp.id = l.product_id
              WHERE l.state = 'EM_ANALISE'
              ORDER BY l.requested_at
             """, Map.of(), (rs, n) -> {
@@ -440,7 +455,7 @@ public class JdbcBankingRepository implements BankingRepository {
                 var payment = Loan.payment(principal, rs.getBigDecimal("monthly_rate"), count);
                 return new PendingLoan(rs.getObject("id", UUID.class),
                         rs.getObject("user_id", UUID.class), rs.getString("full_name"),
-                        principal, count, payment,
+                        rs.getString("product_name"), principal, count, payment,
                         rs.getTimestamp("requested_at").toInstant());
             });
     }
@@ -730,6 +745,13 @@ public class JdbcBankingRepository implements BankingRepository {
             new InvestmentProduct(rs.getString("id"), rs.getString("name"),
                     rs.getString("rate_label"), rs.getString("liquidity"),
                     rs.getBigDecimal("annual_yield"), rs.getString("accent"));
+
+    private static final RowMapper<CreditProduct> CREDIT_PRODUCT_MAPPER = (rs, n) ->
+            new CreditProduct(rs.getString("id"), rs.getString("name"),
+                    rs.getString("description"), rs.getBigDecimal("monthly_rate"),
+                    rs.getInt("max_months"), new Money(rs.getBigDecimal("min_amount")),
+                    new Money(rs.getBigDecimal("max_amount")), rs.getString("icon"),
+                    rs.getString("accent"));
 
     private static final RowMapper<CardRow> CARD_MAPPER = (rs, n) -> new CardRow(
             rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),

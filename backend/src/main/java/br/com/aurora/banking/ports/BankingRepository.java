@@ -73,7 +73,13 @@ public interface BankingRepository {
 
     // Empréstimos
     UUID createLoanAccount(UUID userId);
-    void saveLoan(Loan loan);
+    List<CreditProduct> creditProducts();
+    Optional<CreditProduct> creditProduct(String id);
+    record CreditProduct(String id, String name, String description,
+                         java.math.BigDecimal monthlyRate, int maxMonths,
+                         Money minAmount, Money maxAmount, String icon, String accent) {}
+
+    void saveLoan(Loan loan, String productId);
     void decideLoan(UUID loanId, Loan.LoanState state, String decidedBy, String note);
     void markInstallmentPaid(UUID installmentId);
     List<Loan> listLoans(UUID userId);
@@ -81,8 +87,9 @@ public interface BankingRepository {
     Optional<Loan> findLoanById(UUID loanId);
     List<PendingLoan> pendingLoans();
 
-    record PendingLoan(UUID id, UUID userId, String userName, Money principal,
-                       int installments, Money payment, java.time.Instant requestedAt) {}
+    record PendingLoan(UUID id, UUID userId, String userName, String productName,
+                       Money principal, int installments, Money payment,
+                       java.time.Instant requestedAt) {}
 
     // Pix
     void savePixKey(UUID id, UUID userId, String kind, String value);

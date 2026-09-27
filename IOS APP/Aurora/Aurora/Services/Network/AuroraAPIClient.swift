@@ -165,10 +165,10 @@ actor AuroraAPIClient {
             body: Amount(amountCents: amountCents), as: DTO.Transaction.self)
     }
 
-    func contractLoan(amountCents: Int, months: Int) async throws -> DTO.Loan {
-        struct Body: Encodable { let amountCents, months: Int }
+    func contractLoan(productId: String, amountCents: Int, months: Int) async throws -> DTO.Loan {
+        struct Body: Encodable { let productId: String; let amountCents, months: Int }
         return try await http.request(.post, "v1/credit/loans",
-            body: Body(amountCents: amountCents, months: months), as: DTO.Loan.self)
+            body: Body(productId: productId, amountCents: amountCents, months: months), as: DTO.Loan.self)
     }
     func payInvoice() async throws -> DTO.Transaction {
         try await http.request(.post, "v1/card/invoice/pay", as: DTO.Transaction.self)

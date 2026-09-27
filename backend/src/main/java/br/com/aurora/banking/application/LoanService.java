@@ -39,11 +39,27 @@ public class LoanService {
     public record Simulation(Money principal, int months, Money payment,
                              Money total, Money interest, String rateLabel) {}
 
-    public Simulation simulate(Money principal, int months) {
-        var payment = Loan.payment(principal, MONTHLY_RATE, months);
+    public java.util.List<BankingRepository.CreditProduct> products() {
+        return banking.creditProducts();
+    }
+
+    public Simulation simulate(String productId, Money principal, int months) {
+        var product = requireProduct(productId);
+        var rate = product.monthlyRate();
+        var payment = Loan.payment(principal, rate, months);
         var total = payment.times(months);
         return new Simulation(principal, months, payment, total,
-                total.minus(principal), "2,49% a.m.");
+                total.minus(principal), formatRate(rate));
+    }
+
+    private BankingRepository.CreditProduct requireProduct(String id) {
+        return banking.creditProduct(id)
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Produto de crédito não encontrado."));
+    }
+
+    private static String formatRate(java.math.BigDecimal r) {
+        return String.format("%.2f%% a.m.", r.doubleValue() * 100).replace(".", ",");
     }
 
     /**
@@ -52,10 +68,20 @@ public class LoanService {
      * são calculadas, mas a dívida no razão só entra na aprovação.
      */
     @Transactional
-    public Loan contract(UUID userId, Money principal, int months) {
-        var loan = createPending(userId, principal, months);
-        banking.notify(userId, "transaction", "Empréstimo em análise",
-                "Seu pedido de " + principal + " está em análise.");
+    public Loan contract(UUID userId, String productId, Money principal, int months) {
+        var product = requireProduct(productId);
+        if (principal.isLessThan(product.minAmount()) || principal.isGreaterThan(product.maxAmount())) {
+            throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
+                    "Valor fora da faixa deste produto ("
+                    + product.minAmount() + " a " + product.maxAmount() + ").");
+        }
+        if (months < 1 || months > product.maxMonths()) {
+            throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
+                    "Prazo máximo deste produto é " + product.maxMonths() + " parcelas.");
+        }
+        var loan = createPending(userId, productId, principal, months, product.monthlyRate());
+        banking.notify(userId, "transaction", "Crédito em análise",
+                "Seu pedido de " + principal + " (" + product.name() + ") está em análise.");
         return loan;
     }
 
@@ -110,13 +136,10 @@ public class LoanService {
 
     /** Cria o contrato EM_ANALISE, com parcelas calculadas mas sem dívida. */
     @Transactional
-    public Loan createPending(UUID userId, Money principal, int months) {
-        if (months < 1 || months > 48) {
-            throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
-                    "Escolha entre 1 e 48 parcelas.");
-        }
+    public Loan createPending(UUID userId, String productId, Money principal,
+                              int months, java.math.BigDecimal rate) {
         var liabilityAccount = banking.createLoanAccount(userId);
-        var payment = Loan.payment(principal, MONTHLY_RATE, months);
+        var payment = Loan.payment(principal, rate, months);
         var today = clock.today();
 
         var installments = new ArrayList<Installment>(months);
@@ -125,8 +148,8 @@ public class LoanService {
                     today.plusMonths(n), null));
         }
         var loan = new Loan(UUID.randomUUID(), userId, liabilityAccount, principal,
-                MONTHLY_RATE, months, Loan.LoanState.EM_ANALISE, installments, clock.instant());
-        banking.saveLoan(loan);
+                rate, months, Loan.LoanState.EM_ANALISE, installments, clock.instant());
+        banking.saveLoan(loan, productId);
         return loan;
     }
 
@@ -137,7 +160,8 @@ public class LoanService {
      */
     @Transactional
     public Loan openContractActive(UUID userId, Money principal, int months) {
-        var loan = createPending(userId, principal, months);
+        var loan = createPending(userId, "pessoal", principal, months,
+                new java.math.BigDecimal("0.0199"));
         var payment = loan.installments().get(0).amount();
         mover.move(new MoneyMover.Transfer(
                 userId, loan.liabilityAccountId(), banking.fundingAccount(),

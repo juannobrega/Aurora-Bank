@@ -187,10 +187,10 @@ final class AppModel {
             return ("Dinheiro resgatado", "\(entered.formatted) de volta na conta")
 
         case let f as LoanFlow:
-            _ = try await api.contractLoan(amountCents: f.principal.cents, months: f.months)
+            _ = try await api.contractLoan(productId: f.product.id, amountCents: f.principal.cents, months: f.months)
             await load()
-            return ("Empréstimo em análise",
-                    "Seu pedido de \(f.principal.formatted) foi enviado para análise.")
+            return ("Crédito em análise",
+                    "Seu pedido de \(f.principal.formatted) (\(f.product.name)) foi enviado para análise.")
 
         case let f as BoletoFlow:
             _ = try await api.payBoleto(line: f.barcode)

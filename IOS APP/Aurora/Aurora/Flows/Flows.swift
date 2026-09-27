@@ -276,12 +276,13 @@ struct GoalWithdrawFlow: TransactionFlow {
 struct LoanFlow: TransactionFlow {
     let id = UUID()
     var kind: FlowKind { .loan }
-    var title: String { "Empréstimo pessoal" }
+    var title: String { product.name }
     var steps: [FlowStep] { [.confirm, .pin, .done] }
 
+    var product: CreditProduct = .find("pessoal")
     var principal: Money
     var months: Int
-    var monthlyRate: Decimal = 0.0249
+    var monthlyRate: Decimal { product.monthlyRate }
 
     var amountPrompt: String { "" }
     var confirmPrompt: String { "Você vai receber" }
@@ -295,8 +296,9 @@ struct LoanFlow: TransactionFlow {
 
     func rows(entered: Money, context: FlowContext) -> [FlowRow] {
         [
+            FlowRow(label: "Produto", value: product.name),
             FlowRow(label: "Parcelas", value: "\(months)x de \(payment.formatted)"),
-            FlowRow(label: "Taxa", value: "2,49% a.m."),
+            FlowRow(label: "Taxa", value: product.rateLabel),
             FlowRow(label: "Total a pagar", value: (payment * Decimal(months)).formatted),
             FlowRow(label: "1ª parcela", value: PixFlow.dateText(Self.firstDueDate())),
         ]
@@ -310,7 +312,7 @@ struct LoanFlow: TransactionFlow {
     func commit(entered: Money, model: AppModel) -> FlowResult {
         let loan = model.contractLoan(principal: principal, months: months, monthlyRate: monthlyRate)
         let tx = Transaction(
-            title: "Empréstimo pessoal",
+            title: product.name,
             counterparty: "\(months)x de \(payment.formatted)",
             amount: principal,
             category: .credito,
@@ -320,8 +322,8 @@ struct LoanFlow: TransactionFlow {
         _ = loan
         return FlowResult(
             transaction: tx,
-            doneTitle: "Dinheiro na conta",
-            doneSubtitle: "\(principal.formatted) já está disponível no seu saldo"
+            doneTitle: "Crédito em análise",
+            doneSubtitle: "Seu pedido de \(principal.formatted) foi enviado para análise."
         )
     }
 
