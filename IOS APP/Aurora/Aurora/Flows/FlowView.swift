@@ -234,6 +234,7 @@ struct PinAuthorizationView: View {
     @State private var pin = ""
     @State private var isError = false
     @State private var attempts = 0
+    @State private var biometricsTried = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -261,6 +262,10 @@ struct PinAuthorizationView: View {
             .padding(.bottom, Theme.Space.gutter)
         }
         .task {
+            // Uma única tentativa automática. Sem a guarda, uma falha volta
+            // para esta view, o .task roda de novo e o Face ID entra em loop.
+            guard !biometricsTried else { return }
+            biometricsTried = true
             if allowsBiometrics, model.settings.biometricsEnabled, model.security.hasPIN() {
                 await biometricAuth()
             }

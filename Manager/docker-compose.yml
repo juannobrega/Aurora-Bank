@@ -1,0 +1,14 @@
+# Manager na rede pulsaz. Sem ports: o nginx-gateway alcança por manager:8080.
+name: aurora-manager
+networks:
+  pulsaz:
+    name: pulsaz
+    external: true
+services:
+  manager:
+    build: .
+    image: aurora/manager:latest
+    container_name: manager
+    restart: unless-stopped
+    networks: [pulsaz]
+    expose: ["8080"]

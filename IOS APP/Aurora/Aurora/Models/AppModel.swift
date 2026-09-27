@@ -152,6 +152,16 @@ final class AppModel {
 
     var usesRemoteBackend: Bool { api != nil }
 
+    /// Face ID desbloqueia: a sessão já foi obtida no login e vive no
+    /// Keychain (refresh token). Aqui só validamos que ela ainda serve
+    /// carregando a conta. Devolve false se a sessão morreu — aí pede PIN.
+    func restoreSessionAfterBiometrics() async -> Bool {
+        guard let api else { return true }        // mock: sempre ok
+        guard await api.hasSession() else { return false }
+        await load()
+        return loadError == nil
+    }
+
     /// Lembra quem é o dono deste aparelho entre sessões, para a tela de
     /// bloqueio saudar pelo nome antes de carregar o snapshot. Só dados de
     /// identificação — nunca senha ou saldo.

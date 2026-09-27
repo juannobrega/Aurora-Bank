@@ -77,3 +77,11 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-alig
 .pill.BLOCKED, .pill.CLOSED { background: rgba(255,107,129,.15); color: var(--bad); }
 .credit { color: var(--cyan); }
 .empty { padding: 32px; text-align: center; color: var(--text3); }
+
+/* Aprovação de empréstimos */
+.btn-approve, .btn-reject { border: none; border-radius: 10px; padding: 7px 14px;
+  font-family: var(--sans); font-weight: 500; font-size: 13px; cursor: pointer;
+  margin-left: 8px; }
+.btn-approve { background: var(--grad); color: #fff; }
+.btn-reject { background: rgba(255,107,129,.15); color: var(--bad); }
+.btn-approve:disabled, .btn-reject:disabled { opacity: .5; cursor: default; }

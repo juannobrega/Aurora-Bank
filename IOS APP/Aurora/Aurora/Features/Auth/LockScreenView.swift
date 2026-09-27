@@ -35,7 +35,9 @@ struct LockScreenView: View {
                     allowsBiometrics: model.settings.biometricsEnabled,
                     verifyLocally: !model.usesRemoteBackend
                 ) { pin in
-                    Task { await enter(pin: pin) }
+                    // PIN vazio = veio da biometria. Face ID restaura a
+                    // sessão salva; PIN de 4 dígitos autentica na API.
+                    Task { pin.isEmpty ? await enterWithBiometrics() : await enter(pin: pin) }
                 }
                 .frame(maxHeight: 460)
             }
@@ -53,6 +55,19 @@ struct LockScreenView: View {
 
     private var greeting: String {
         model.user.name.isEmpty ? "Bem-vindo" : "Olá, \(model.user.firstName)"
+    }
+
+    /// Face ID aprovado: tenta restaurar a sessão existente. Se ela morreu,
+    /// avisa e deixa o usuário digitar o PIN — sem tentar de novo sozinho.
+    private func enterWithBiometrics() async {
+        if !model.usesRemoteBackend { model.unlock(); return }
+        authenticating = true
+        if await model.restoreSessionAfterBiometrics() {
+            model.unlock()
+        } else {
+            authenticating = false
+            authError = "Sessão expirada. Digite seu PIN para entrar."
+        }
     }
 
     /// Valida o PIN e, se remoto, autentica na API antes de abrir a home.

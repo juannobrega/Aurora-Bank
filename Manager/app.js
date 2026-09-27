@@ -1,10 +1,12 @@
 const { useState, useEffect, useCallback } = React;
 const h = React.createElement;
 
-// Em manager.pulsaz.com.br a API é o mesmo host; em dev, aponta para produção.
-const API = location.hostname === 'manager.pulsaz.com.br' ? '' : 'https://bank.pulsaz.com.br';
+// A API vive em bank.pulsaz.com.br; o Manager é outro domínio (manager.*),
+// então sempre aponta para a API por URL absoluta.
+const API = 'https://bank.pulsaz.com.br';
 
 const fromDecimal = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fromCents = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const statusLabel = s => ({ ACTIVE: 'Ativo', PENDING_KYC: 'KYC pendente',
   BLOCKED: 'Bloqueado', CLOSED: 'Encerrado' }[s] || s);
 function relTime(iso) {
@@ -99,6 +101,47 @@ function Table({ title, head, rows, empty }) {
           : h('tr', null, h('td', { colSpan: head.length, className: 'empty' }, empty)))))));
 }
 
+function PendingLoans({ apiKey, loans, onDecided }) {
+  const [busy, setBusy] = useState(null);
+
+  const decide = async (id, action) => {
+    setBusy(id + action);
+    try {
+      await fetch(API + '/admin/loans/' + id + '/' + action, {
+        method: 'POST', headers: { 'X-Admin-Key': apiKey, 'Content-Type': 'application/json' },
+        body: action === 'reject' ? JSON.stringify({ note: 'Análise reprovada' }) : null
+      });
+      onDecided();
+    } finally { setBusy(null); }
+  };
+
+  if (!loans.length) return null;   // some quando não há nada em análise
+
+  const head = ['Cliente', 'Valor', 'Parcelas', 'Pedido', 'Decisão'].map((c, i) =>
+    h('th', { key: i, style: i === 4 ? { textAlign: 'right' } : null }, c));
+
+  const row = l => h('tr', { key: l.id },
+    h('td', null, l.userName),
+    h('td', { className: 'num' }, fromCents(l.principalCents)),
+    h('td', { className: 'mono' }, l.installments + 'x ' + fromCents(l.paymentCents)),
+    h('td', { className: 'updated' }, relTime(l.requestedAt)),
+    h('td', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
+      h('button', { className: 'btn-approve', disabled: !!busy,
+        onClick: () => decide(l.id, 'approve') },
+        busy === l.id + 'approve' ? '…' : 'Aprovar'),
+      h('button', { className: 'btn-reject', disabled: !!busy,
+        onClick: () => decide(l.id, 'reject') },
+        busy === l.id + 'reject' ? '…' : 'Recusar')));
+
+  return h('section', null,
+    h('h2', null, 'Empréstimos em análise'),
+    h('div', { className: 'panel' },
+      h('div', { className: 'scroll' },
+        h('table', null,
+          h('thead', null, h('tr', null, head)),
+          h('tbody', null, loans.map(row))))));
+}
+
 function Dashboard({ apiKey, onLogout }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -106,11 +149,12 @@ function Dashboard({ apiKey, onLogout }) {
 
   const load = useCallback(async () => {
     try {
-      const [metrics, health, users, txs] = await Promise.all([
+      const [metrics, health, users, txs, pending] = await Promise.all([
         callApi(apiKey, '/metrics'), callApi(apiKey, '/ledger/health'),
         callApi(apiKey, '/users?limit=50'), callApi(apiKey, '/transactions?limit=30'),
+        callApi(apiKey, '/loans/pending'),
       ]);
-      setData({ metrics, health, users, txs });
+      setData({ metrics, health, users, txs, pending });
       setUpdated(new Date().toLocaleTimeString('pt-BR'));
       setErr('');
     } catch (e) {
@@ -150,6 +194,7 @@ function Dashboard({ apiKey, onLogout }) {
         h('button', { className: 'btn-ghost', onClick: onLogout }, 'Sair'))),
     h(Health, { health: data.health }),
     h(Metrics, { m: data.metrics }),
+    h(PendingLoans, { apiKey, loans: data.pending, onDecided: load }),
     h(Table, { title: 'Usuários',
       head: [{ label: 'Nome' }, { label: 'CPF' }, { label: 'Status' },
              { label: 'Saldo', right: true }, { label: 'Criado' }],
