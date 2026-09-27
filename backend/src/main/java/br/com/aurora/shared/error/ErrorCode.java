@@ -87,6 +87,9 @@ public enum ErrorCode {
     SEM_RENDIMENTO(HttpStatus.UNPROCESSABLE_ENTITY,
         "Esta posição ainda não tem rendimento para aplicar."),
 
+    // Administração
+    ADMIN_NAO_AUTORIZADO(HttpStatus.UNAUTHORIZED, "Chave de administração inválida."),
+
     // Idempotência
     IDEMPOTENCIA_EM_ANDAMENTO(HttpStatus.CONFLICT,
         "Uma requisição com esta chave ainda está em processamento."),

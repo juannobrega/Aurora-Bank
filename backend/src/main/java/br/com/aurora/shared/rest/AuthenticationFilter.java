@@ -30,6 +30,7 @@ public class AuthenticationFilter extends OncePerRequestFilter {
             "/v1/onboarding",      // criar conta e cadastrar rosto
             "/v1/auth/login",
             "/v1/auth/refresh",
+            "/admin",   // protegido pela própria X-Admin-Key, não pelo JWT
             "/docs", "/swagger-ui", "/v3/api-docs", "/actuator/health");
 
     private final TokenService tokens;

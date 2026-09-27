@@ -18,6 +18,10 @@ aurora:
     # HMAC-SHA256 em Base64. Chave de DESENVOLVIMENTO — injete por variável
     # de ambiente em qualquer uso sério.
     secret: ${AURORA_JWT_SECRET:WOgfoW09MUdJyulwcc8aEgX5FEJeDp68yBwr7MPlhZQ=}
+  admin:
+    # Chave do painel de gestão. Chave de DESENVOLVIMENTO — injete por
+    # variável de ambiente em qualquer uso sério.
+    key: ${AURORA_ADMIN_KEY:aurora-admin-dev-key-trocar}
   crypto:
     # AES-256 em Base64 (32 bytes). Cifra o template biométrico em repouso.
     # Esta é uma chave de DESENVOLVIMENTO: em qualquer uso sério, injete por
