@@ -152,6 +152,61 @@ final class AppModel {
 
     var usesRemoteBackend: Bool { api != nil }
 
+    /// Executa um fluxo transacional na API real e recarrega a conta.
+    /// Devolve (título, subtítulo) para o comprovante. Lança em falha.
+    func runRemoteFlow(_ flow: any TransactionFlow, entered: Money) async throws -> (String, String) {
+        guard let api else { return ("", "") }
+        let cents = entered.cents
+
+        switch flow {
+        case let f as PixFlow:
+            _ = try await api.sendPix(pixKey: f.contact?.key ?? "",
+                                      amountCents: cents, note: nil)
+            let who = f.contact?.name ?? "destinatário"
+            await load()
+            return ("Pix enviado", "\(entered.formatted) para \(who)")
+
+        case let f as InvestFlow:
+            _ = try await api.invest(productId: f.product.id, amountCents: cents)
+            await load()
+            return ("Investimento feito", "\(entered.formatted) em \(f.product.name)")
+
+        case let f as RedeemFlow:
+            _ = try await api.redeem(productId: f.holding.id, amountCents: cents)
+            await load()
+            return ("Resgate concluído", "\(entered.formatted) de volta na conta")
+
+        case let f as GoalDepositFlow:
+            _ = try await api.depositGoal(id: f.goal.id.uuidString.lowercased(), amountCents: cents)
+            await load()
+            return ("Dinheiro guardado", "\(entered.formatted) em \(f.goal.name)")
+
+        case let f as GoalWithdrawFlow:
+            _ = try await api.withdrawGoal(id: f.goal.id.uuidString.lowercased(), amountCents: cents)
+            await load()
+            return ("Dinheiro resgatado", "\(entered.formatted) de volta na conta")
+
+        case let f as LoanFlow:
+            _ = try await api.contractLoan(amountCents: f.principal.cents, months: f.months)
+            await load()
+            return ("Empréstimo em análise",
+                    "Seu pedido de \(f.principal.formatted) foi enviado para análise.")
+
+        case let f as BoletoFlow:
+            _ = try await api.payBoleto(line: f.barcode)
+            await load()
+            return ("Boleto pago", "\(f.amount.formatted) para \(f.payee)")
+
+        case let f as RecargaFlow:
+            _ = try await api.recharge(phone: f.phone, amountCents: cents)
+            await load()
+            return ("Recarga feita", "\(entered.formatted) para \(f.phone)")
+
+        default:
+            throw APIError.unexpected
+        }
+    }
+
     /// Face ID desbloqueia: a sessão já foi obtida no login e vive no
     /// Keychain (refresh token). Aqui só validamos que ela ainda serve
     /// carregando a conta. Devolve false se a sessão morreu — aí pede PIN.

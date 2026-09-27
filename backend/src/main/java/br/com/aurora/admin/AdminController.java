@@ -78,6 +78,33 @@ public class AdminController {
         return repo.recentTransactions(Math.min(limit, 100));
     }
 
+    // ── Sessões ──────────────────────────────────────────────────────────
+
+    public record SessionView(String id, String userName, String device,
+                              java.time.Instant issuedAt, java.time.Instant expiresAt) {}
+
+    @GetMapping("/sessions")
+    @Operation(summary = "Sessões ativas de todos os usuários")
+    public java.util.List<SessionView> sessions(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key) {
+        authorize(key);
+        return repo.activeSessions().stream()
+                .map(r -> new SessionView(r.id().toString(), r.userName(),
+                        r.deviceName() == null ? "—" : r.deviceName(),
+                        r.issuedAt(), r.expiresAt()))
+                .toList();
+    }
+
+    @PostMapping("/sessions/{sessionId}/revoke")
+    @Operation(summary = "Revoga uma sessão")
+    public java.util.Map<String, String> revokeSession(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key,
+            @PathVariable java.util.UUID sessionId) {
+        authorize(key);
+        repo.revokeSession(sessionId);
+        return java.util.Map.of("status", "revoked");
+    }
+
     // ── Análise de crédito ──────────────────────────────────────────────
 
     public record PendingLoanView(String id, String userName, long principalCents,

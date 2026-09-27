@@ -142,6 +142,37 @@ function PendingLoans({ apiKey, loans, onDecided }) {
           h('tbody', null, loans.map(row))))));
 }
 
+function Sessions({ apiKey, sessions, onRevoked }) {
+  const [busy, setBusy] = useState(null);
+  const revoke = async id => {
+    setBusy(id);
+    try {
+      await fetch(API + '/admin/sessions/' + id + '/revoke',
+        { method: 'POST', headers: { 'X-Admin-Key': apiKey } });
+      onRevoked();
+    } finally { setBusy(null); }
+  };
+
+  const head = ['Usuário', 'Dispositivo', 'Início', 'Expira', ''].map((c, i) =>
+    h('th', { key: i, style: i === 4 ? { textAlign: 'right' } : null }, c));
+  const row = sn => h('tr', { key: sn.id },
+    h('td', null, sn.userName),
+    h('td', { className: 'updated' }, sn.device),
+    h('td', { className: 'updated' }, relTime(sn.issuedAt)),
+    h('td', { className: 'updated' }, 'em ' + relTime(sn.expiresAt).replace('agora', 'breve')),
+    h('td', { style: { textAlign: 'right' } },
+      h('button', { className: 'btn-reject', disabled: busy === sn.id,
+        onClick: () => revoke(sn.id) }, busy === sn.id ? '…' : 'Encerrar')));
+
+  return h('section', null,
+    h('h2', null, 'Sessões ativas'),
+    h('div', { className: 'panel' }, h('div', { className: 'scroll' },
+      h('table', null,
+        h('thead', null, h('tr', null, head)),
+        h('tbody', null, sessions.length ? sessions.map(row)
+          : h('tr', null, h('td', { colSpan: 5, className: 'empty' }, 'Nenhuma sessão ativa')))))));
+}
+
 function Dashboard({ apiKey, onLogout }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -149,12 +180,12 @@ function Dashboard({ apiKey, onLogout }) {
 
   const load = useCallback(async () => {
     try {
-      const [metrics, health, users, txs, pending] = await Promise.all([
+      const [metrics, health, users, txs, pending, sessions] = await Promise.all([
         callApi(apiKey, '/metrics'), callApi(apiKey, '/ledger/health'),
         callApi(apiKey, '/users?limit=50'), callApi(apiKey, '/transactions?limit=30'),
-        callApi(apiKey, '/loans/pending'),
+        callApi(apiKey, '/loans/pending'), callApi(apiKey, '/sessions'),
       ]);
-      setData({ metrics, health, users, txs, pending });
+      setData({ metrics, health, users, txs, pending, sessions });
       setUpdated(new Date().toLocaleTimeString('pt-BR'));
       setErr('');
     } catch (e) {
@@ -199,6 +230,7 @@ function Dashboard({ apiKey, onLogout }) {
       head: [{ label: 'Nome' }, { label: 'CPF' }, { label: 'Status' },
              { label: 'Saldo', right: true }, { label: 'Criado' }],
       rows: userRows, empty: 'Nenhum usuário ainda' }),
+    h(Sessions, { apiKey, sessions: data.sessions, onRevoked: load }),
     h(Table, { title: 'Transações recentes',
       head: [{ label: 'Descrição' }, { label: 'Contraparte' }, { label: 'Categoria' },
              { label: 'Meio' }, { label: 'Valor', right: true }, { label: 'Quando' }],

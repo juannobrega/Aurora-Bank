@@ -118,8 +118,7 @@ final class FaceCaptureController: NSObject {
     }
 
     private func finish() {
-        // Template de 128 dims a partir dos landmarks normalizados. Determinístico
-        // para o mesmo rosto, com pequena variação natural entre capturas.
+        // O descritor da última amostra já vem normalizado com 128 dims.
         var t = lastLandmarks
         if t.count < 128 { t += Array(repeating: 0, count: 128 - t.count) }
         template = Array(t.prefix(128))
@@ -143,23 +142,83 @@ extension FaceCaptureController: AVCaptureVideoDataOutputSampleBufferDelegate {
             .max(by: { $0.boundingBox.width < $1.boundingBox.width })
 
         let sample: FaceCaptureController.FaceSample? = face.map { f in
-            var pts: [Float] = []
-            if let lm = f.landmarks {
-                for region in [lm.leftEye, lm.rightEye, lm.nose, lm.outerLips,
-                               lm.leftEyebrow, lm.rightEyebrow, lm.faceContour] {
-                    guard let region else { continue }
-                    for p in region.normalizedPoints {
-                        pts.append(Float(p.x)); pts.append(Float(p.y))
-                    }
-                }
-            }
             let open = openness(f.landmarks?.leftEye) + openness(f.landmarks?.rightEye)
             return .init(faceWidth: Double(f.boundingBox.width),
-                         eyeOpenness: open, landmarks: pts.count >= 64 ? pts : [])
+                         eyeOpenness: open,
+                         landmarks: faceDescriptor(f.landmarks) )
         }
         Task { @MainActor [weak self] in self?.analyze(sample) }
     }
 
+}
+
+/// Descritor facial de 128 dimensões, normalizado e reprodutível.
+///
+/// O problema do template cru era não sobreviver a mudanças de posição,
+/// tamanho e leve rotação — o mesmo rosto virava vetores diferentes a cada
+/// captura, e o login por rosto falhava. Aqui os pontos são:
+///
+///  1. recentrados na média dos dois olhos (invariante à posição no quadro);
+///  2. escalados pela distância interocular (invariante ao tamanho/distância);
+///  3. rotacionados para deixar os olhos na horizontal (invariante à inclinação);
+///  4. reamostrados por região a um número fixo de pontos, para o vetor ter
+///     sempre a mesma forma e as mesmas dimensões comparáveis.
+///
+/// Não é um embedding de rede neural, mas é geometria estável — o suficiente
+/// para o mesmo rosto conferir consigo mesmo entre capturas.
+private func faceDescriptor(_ lm: VNFaceLandmarks2D?) -> [Float] {
+    guard let lm, let le = lm.leftEye, let re = lm.rightEye else { return [] }
+
+    func center(_ r: VNFaceLandmarkRegion2D) -> (Double, Double) {
+        let ps = r.normalizedPoints
+        let cx = ps.map { Double($0.x) }.reduce(0, +) / Double(ps.count)
+        let cy = ps.map { Double($0.y) }.reduce(0, +) / Double(ps.count)
+        return (cx, cy)
+    }
+    let (lx, ly) = center(le), (rx, ry) = center(re)
+    let ox = (lx + rx) / 2, oy = (ly + ry) / 2           // centro entre os olhos
+    let dx = rx - lx, dy = ry - ly
+    let interocular = max(1e-4, (dx*dx + dy*dy).squareRoot())  // escala
+    let angle = atan2(dy, dx)                             // inclinação
+    let cosA = cos(-angle), sinA = sin(-angle)
+
+    // Normaliza um ponto: centraliza, escala, desrotaciona.
+    func norm(_ x: Double, _ y: Double) -> (Float, Float) {
+        let tx = (x - ox) / interocular, ty = (y - oy) / interocular
+        return (Float(tx * cosA - ty * sinA), Float(tx * sinA + ty * cosA))
+    }
+
+    // Reamostra cada região a um número fixo de pontos, por interpolação.
+    func resample(_ r: VNFaceLandmarkRegion2D?, _ count: Int) -> [Float] {
+        guard let r, !r.normalizedPoints.isEmpty else {
+            return Array(repeating: 0, count: count * 2)
+        }
+        let ps = r.normalizedPoints
+        var out: [Float] = []
+        for i in 0..<count {
+            let t = Double(i) / Double(max(1, count - 1)) * Double(ps.count - 1)
+            let lo = Int(t.rounded(.down)), hi = min(ps.count - 1, lo + 1)
+            let frac = t - Double(lo)
+            let x = Double(ps[lo].x) * (1 - frac) + Double(ps[hi].x) * frac
+            let y = Double(ps[lo].y) * (1 - frac) + Double(ps[hi].y) * frac
+            let (nx, ny) = norm(x, y)
+            out.append(nx); out.append(ny)
+        }
+        return out
+    }
+
+    // 64 pontos no total (×2 coords = 128 dims), distribuídos por região.
+    var v: [Float] = []
+    v += resample(lm.leftEye, 8)
+    v += resample(lm.rightEye, 8)
+    v += resample(lm.leftEyebrow, 6)
+    v += resample(lm.rightEyebrow, 6)
+    v += resample(lm.nose, 8)
+    v += resample(lm.outerLips, 12)
+    v += resample(lm.faceContour, 16)
+    // Garante exatamente 128 dimensões.
+    if v.count < 128 { v += Array(repeating: 0, count: 128 - v.count) }
+    return Array(v.prefix(128))
 }
 
 /// Abertura vertical do olho pelos landmarks — livre, para o delegate

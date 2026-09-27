@@ -172,12 +172,24 @@ struct FlowView: View {
 
     private var pinStep: some View {
         let shown = session.flow.displayAmount(entered: session.entered)
-        return PinAuthorizationView(
-            title: "Digite seu PIN",
-            subtitle: "Para autorizar \(shown.formatted)",
-            allowsBiometrics: model.settings.biometricsEnabled
-        ) { _ in
-            commit()
+        return ZStack {
+            PinAuthorizationView(
+                title: "Digite seu PIN",
+                subtitle: commitError ?? "Para autorizar \(shown.formatted)",
+                subtitleIsError: commitError != nil,
+                allowsBiometrics: model.settings.biometricsEnabled
+            ) { _ in
+                commit()
+            }
+            if committing {
+                VStack(spacing: 14) {
+                    OrbitLoader(size: 44)
+                    Text("Processando com segurança…")
+                        .font(.auroraBody).foregroundStyle(Theme.text2)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.navy.opacity(0.94))
+            }
         }
     }
 
@@ -198,11 +210,38 @@ struct FlowView: View {
         }
     }
 
+    @State private var committing = false
+    @State private var commitError: String?
+
     private func commit() {
-        let result = session.flow.commit(entered: session.entered, model: model)
-        session.result = result
-        Haptics.success()
-        session.advance()
+        if model.usesRemoteBackend {
+            committing = true
+            Task {
+                do {
+                    let (title, subtitle) = try await model.runRemoteFlow(
+                        session.flow, entered: session.entered)
+                    // O comprovante usa a transação local só para código/data;
+                    // título e subtítulo vêm da resposta da API.
+                    var result = session.flow.commit(entered: session.entered, model: model)
+                    result = FlowResult(transaction: result.transaction,
+                                        doneTitle: title, doneSubtitle: subtitle)
+                    session.result = result
+                    committing = false
+                    Haptics.success()
+                    session.advance()
+                } catch {
+                    committing = false
+                    commitError = (error as? APIError)?.message
+                        ?? "Não foi possível concluir. Tente de novo."
+                    Haptics.error()
+                }
+            }
+        } else {
+            let result = session.flow.commit(entered: session.entered, model: model)
+            session.result = result
+            Haptics.success()
+            session.advance()
+        }
     }
 }
 

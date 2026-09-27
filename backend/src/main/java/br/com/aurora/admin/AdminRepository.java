@@ -109,6 +109,35 @@ public class AdminRepository {
                     rs.getTimestamp("occurred_at").toInstant()));
     }
 
+    public record SessionRow(UUID id, UUID userId, String userName, String deviceName,
+                             Instant issuedAt, Instant expiresAt) {}
+
+    /** Sessões ativas (não revogadas, não expiradas) de todos os usuários. */
+    public List<SessionRow> activeSessions() {
+        return jdbc.query("""
+            SELECT s.id, s.user_id, u.full_name, d.name AS device_name,
+                   s.issued_at, s.expires_at
+              FROM sessions s
+              JOIN users u ON u.id = s.user_id
+              LEFT JOIN devices d ON d.id = s.device_id
+             WHERE s.revoked_at IS NULL AND s.expires_at > now()
+             ORDER BY s.issued_at DESC
+            """, Map.of(),
+            (rs, n) -> new SessionRow(rs.getObject("id", UUID.class),
+                    rs.getObject("user_id", UUID.class), rs.getString("full_name"),
+                    rs.getString("device_name"),
+                    rs.getTimestamp("issued_at").toInstant(),
+                    rs.getTimestamp("expires_at").toInstant()));
+    }
+
+    /** Revoga uma sessão específica (admin). */
+    public void revokeSession(UUID sessionId) {
+        jdbc.update("""
+            UPDATE sessions SET revoked_at = now(), revoked_reason = 'revogada pelo admin'
+             WHERE id = :id AND revoked_at IS NULL
+            """, Map.of("id", sessionId));
+    }
+
     private static String maskCpf(String cpf) {
         if (cpf == null || cpf.length() != 11) return "";
         return "***." + cpf.substring(3, 6) + "." + cpf.substring(6, 9) + "-**";
