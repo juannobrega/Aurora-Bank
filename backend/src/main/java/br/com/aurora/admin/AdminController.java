@@ -1,5 +1,7 @@
 package br.com.aurora.admin;
 
+import br.com.aurora.banking.application.LoanService;
+import br.com.aurora.banking.ports.BankingRepository;
 import br.com.aurora.shared.error.DomainException;
 import br.com.aurora.shared.error.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,11 +24,16 @@ import java.util.List;
 public class AdminController {
 
     private final AdminRepository repo;
+    private final BankingRepository banking;
+    private final LoanService loans;
     private final String adminKey;
 
-    public AdminController(AdminRepository repo,
+    public AdminController(AdminRepository repo, BankingRepository banking,
+                           LoanService loans,
                            @Value("${aurora.admin.key}") String adminKey) {
         this.repo = repo;
+        this.banking = banking;
+        this.loans = loans;
         this.adminKey = adminKey;
     }
 
@@ -69,6 +76,46 @@ public class AdminController {
             @RequestParam(defaultValue = "30") int limit) {
         authorize(key);
         return repo.recentTransactions(Math.min(limit, 100));
+    }
+
+    // ── Análise de crédito ──────────────────────────────────────────────
+
+    public record PendingLoanView(String id, String userName, long principalCents,
+                                  int installments, long paymentCents, java.time.Instant requestedAt) {}
+
+    @GetMapping("/loans/pending")
+    @Operation(summary = "Empréstimos aguardando análise")
+    public java.util.List<PendingLoanView> pendingLoans(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key) {
+        authorize(key);
+        return banking.pendingLoans().stream()
+                .map(l -> new PendingLoanView(l.id().toString(), l.userName(),
+                        l.principal().cents(), l.installments(), l.payment().cents(),
+                        l.requestedAt()))
+                .toList();
+    }
+
+    public record DecisionRequest(String note) {}
+
+    @PostMapping("/loans/{loanId}/approve")
+    @Operation(summary = "Aprova o empréstimo (desembolsa na conta do cliente)")
+    public java.util.Map<String, String> approve(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key,
+            @PathVariable java.util.UUID loanId) {
+        authorize(key);
+        var loan = loans.approve(loanId, "manager");
+        return java.util.Map.of("state", loan.state().name());
+    }
+
+    @PostMapping("/loans/{loanId}/reject")
+    @Operation(summary = "Recusa o empréstimo")
+    public java.util.Map<String, String> reject(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key,
+            @PathVariable java.util.UUID loanId,
+            @RequestBody(required = false) DecisionRequest body) {
+        authorize(key);
+        var loan = loans.reject(loanId, "manager", body == null ? null : body.note());
+        return java.util.Map.of("state", loan.state().name());
     }
 
     private static boolean constantTimeEquals(String a, String b) {

@@ -302,7 +302,7 @@ public class TransactionController {
                                   @Min(1) @Max(48) int months) {}
 
     public record LoanView(UUID id, long principalCents, int installments,
-                           long paidCount, long outstandingCents,
+                           long paidCount, long outstandingCents, String state,
                            List<InstallmentView> schedule) {}
 
     public record InstallmentView(UUID id, int number, long amountCents,
@@ -331,7 +331,7 @@ public class TransactionController {
 
     private static LoanView toView(br.com.aurora.banking.domain.Loan loan) {
         return new LoanView(loan.id(), loan.principal().cents(), loan.installmentCount(),
-                loan.paidCount(), loan.outstanding().cents(),
+                loan.paidCount(), loan.outstanding().cents(), loan.state().name(),
                 loan.installments().stream()
                         .map(i -> new InstallmentView(i.id(), i.number(),
                                 i.amount().cents(), i.dueDate(), i.isPaid()))

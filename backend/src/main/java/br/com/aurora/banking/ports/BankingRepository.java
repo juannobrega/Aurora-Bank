@@ -74,9 +74,15 @@ public interface BankingRepository {
     // Empréstimos
     UUID createLoanAccount(UUID userId);
     void saveLoan(Loan loan);
+    void decideLoan(UUID loanId, Loan.LoanState state, String decidedBy, String note);
     void markInstallmentPaid(UUID installmentId);
     List<Loan> listLoans(UUID userId);
     Optional<Loan> findLoan(UUID userId, UUID loanId);
+    Optional<Loan> findLoanById(UUID loanId);
+    List<PendingLoan> pendingLoans();
+
+    record PendingLoan(UUID id, UUID userId, String userName, Money principal,
+                       int installments, Money payment, java.time.Instant requestedAt) {}
 
     // Pix
     void savePixKey(UUID id, UUID userId, String kind, String value);

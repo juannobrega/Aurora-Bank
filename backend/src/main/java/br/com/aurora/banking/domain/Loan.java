@@ -11,8 +11,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public record Loan(UUID id, UUID userId, UUID liabilityAccountId, Money principal,
-                   BigDecimal monthlyRate, int installmentCount,
+                   BigDecimal monthlyRate, int installmentCount, LoanState state,
                    List<Installment> installments, Instant contractedAt) {
+
+    /** Ciclo de vida do empréstimo, incluindo a análise de crédito. */
+    public enum LoanState { EM_ANALISE, ACTIVE, SETTLED, RECUSADO, DEFAULTED }
+
+    public boolean isUnderReview() { return state == LoanState.EM_ANALISE; }
 
     public long paidCount() {
         return installments.stream().filter(Installment::isPaid).count();

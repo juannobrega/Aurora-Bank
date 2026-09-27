@@ -172,7 +172,7 @@ public class CardService {
                 "FATURA_PARCELADA", "Parcelamento de fatura", "Cartão Aurora",
                 TxCategory.credito, TxMethod.credito, false, invoice, null));
 
-        return loans.openContract(userId, invoice, months).id();
+        return loans.openContractActive(userId, invoice, months).id();
     }
 
     @Transactional

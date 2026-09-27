@@ -383,15 +383,17 @@ public class JdbcBankingRepository implements BankingRepository {
     public void saveLoan(Loan loan) {
         jdbc.update("""
             INSERT INTO loans (id, user_id, liability_account_id, principal,
-                               monthly_rate, installments)
-            VALUES (:id, :user, :account, :principal, :rate, :count)
+                               monthly_rate, installments, state, requested_at)
+            VALUES (:id, :user, :account, :principal, :rate, :count,
+                    CAST(:state AS loan_state), now())
             """,
             new MapSqlParameterSource()
                 .addValue("id", loan.id()).addValue("user", loan.userId())
                 .addValue("account", loan.liabilityAccountId())
                 .addValue("principal", loan.principal().amount())
                 .addValue("rate", loan.monthlyRate())
-                .addValue("count", loan.installmentCount()));
+                .addValue("count", loan.installmentCount())
+                .addValue("state", loan.state().name()));
 
         var batch = loan.installments().stream()
                 .map(i -> new MapSqlParameterSource()
@@ -405,6 +407,42 @@ public class JdbcBankingRepository implements BankingRepository {
             INSERT INTO installments (id, loan_id, number, amount, due_date)
             VALUES (:id, :loan, :number, :amount, :due)
             """, batch);
+    }
+
+    @Override
+    public void decideLoan(UUID loanId, Loan.LoanState state, String decidedBy, String note) {
+        jdbc.update("""
+            UPDATE loans SET state = CAST(:state AS loan_state),
+                   decided_at = now(), decided_by = :by, decision_note = :note
+             WHERE id = :id
+            """,
+            Map.of("id", loanId, "state", state.name(), "by", decidedBy,
+                   "note", note == null ? "" : note));
+    }
+
+    @Override
+    public Optional<Loan> findLoanById(UUID loanId) {
+        return jdbc.query("SELECT * FROM loans WHERE id = :id",
+                Map.of("id", loanId), loanMapper()).stream().findFirst();
+    }
+
+    @Override
+    public List<PendingLoan> pendingLoans() {
+        return jdbc.query("""
+            SELECT l.id, l.user_id, u.full_name, l.principal, l.installments,
+                   l.monthly_rate, l.requested_at
+              FROM loans l JOIN users u ON u.id = l.user_id
+             WHERE l.state = 'EM_ANALISE'
+             ORDER BY l.requested_at
+            """, Map.of(), (rs, n) -> {
+                var principal = new Money(rs.getBigDecimal("principal"));
+                int count = rs.getInt("installments");
+                var payment = Loan.payment(principal, rs.getBigDecimal("monthly_rate"), count);
+                return new PendingLoan(rs.getObject("id", UUID.class),
+                        rs.getObject("user_id", UUID.class), rs.getString("full_name"),
+                        principal, count, payment,
+                        rs.getTimestamp("requested_at").toInstant());
+            });
     }
 
     @Override
@@ -443,8 +481,9 @@ public class JdbcBankingRepository implements BankingRepository {
                     rs.getObject("liability_account_id", UUID.class),
                     new Money(rs.getBigDecimal("principal")),
                     rs.getBigDecimal("monthly_rate"),
-                    rs.getInt("installments"), installments,
-                    rs.getTimestamp("contracted_at").toInstant());
+                    rs.getInt("installments"),
+                    Loan.LoanState.valueOf(rs.getString("state")),
+                    installments, rs.getTimestamp("contracted_at").toInstant());
         };
     }
 

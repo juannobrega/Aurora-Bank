@@ -47,35 +47,70 @@ public class LoanService {
     }
 
     /**
-     * Empréstimo pessoal: cria a dívida <b>e</b> desembolsa o dinheiro na
-     * conta corrente.
+     * Solicita um empréstimo pessoal. <b>Não desembolsa</b>: o contrato nasce
+     * EM_ANALISE e só vira dinheiro quando o Manager aprova. As parcelas já
+     * são calculadas, mas a dívida no razão só entra na aprovação.
      */
     @Transactional
     public Loan contract(UUID userId, Money principal, int months) {
-        var loan = openContract(userId, principal, months);
-
-        mover.move(new MoneyMover.Transfer(
-                userId, banking.fundingAccount(), banking.checkingAccountOf(userId),
-                principal, "EMPRESTIMO_DESEMBOLSO", "Empréstimo pessoal",
-                months + "x de " + loan.installments().get(0).amount(),
-                TxCategory.credito, TxMethod.emprestimo, true, null));
-
-        banking.notify(userId, "transaction", "Empréstimo aprovado",
-                principal + " já está na sua conta");
+        var loan = createPending(userId, principal, months);
+        banking.notify(userId, "transaction", "Empréstimo em análise",
+                "Seu pedido de " + principal + " está em análise.");
         return loan;
     }
 
     /**
-     * Cria o contrato e registra a dívida no passivo, <b>sem</b> desembolsar
-     * dinheiro na conta.
-     *
-     * <p>Usado pelo parcelamento de fatura: ali o cliente não recebe nada —
-     * a fatura, que já saiu do passivo do cartão, vira a dívida deste
-     * contrato. Reusar o {@code contract} completo depositaria o valor da
-     * fatura na conta corrente, dando dinheiro grátis.
+     * Aprova um empréstimo em análise: reconhece a dívida no passivo e
+     * desembolsa o principal na conta. Chamado pelo Manager.
      */
     @Transactional
-    public Loan openContract(UUID userId, Money principal, int months) {
+    public Loan approve(UUID loanId, String decidedBy) {
+        var loan = banking.findLoanById(loanId)
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Contrato não encontrado."));
+        if (!loan.isUnderReview()) {
+            throw new DomainException(ErrorCode.EMPRESTIMO_JA_DECIDIDO);
+        }
+        var payment = loan.installments().get(0).amount();
+
+        // A dívida entra no passivo (contraparte funding) e o dinheiro sai
+        // do funding para a conta do cliente. Nada disso aconteceu na análise.
+        mover.move(new MoneyMover.Transfer(
+                loan.userId(), loan.liabilityAccountId(), banking.fundingAccount(),
+                payment.times(loan.installmentCount()), "EMPRESTIMO_DIVIDA",
+                "Dívida contratada", "Saldo devedor", TxCategory.credito,
+                TxMethod.emprestimo, false, null));
+        mover.move(new MoneyMover.Transfer(
+                loan.userId(), banking.fundingAccount(), banking.checkingAccountOf(loan.userId()),
+                loan.principal(), "EMPRESTIMO_DESEMBOLSO", "Empréstimo pessoal",
+                loan.installmentCount() + "x de " + payment, TxCategory.credito,
+                TxMethod.emprestimo, true, null));
+
+        banking.decideLoan(loanId, Loan.LoanState.ACTIVE, decidedBy, null);
+        banking.notify(loan.userId(), "transaction", "Empréstimo aprovado",
+                loan.principal() + " já está na sua conta.");
+        return banking.findLoanById(loanId).orElseThrow();
+    }
+
+    /** Recusa um empréstimo em análise. */
+    @Transactional
+    public Loan reject(UUID loanId, String decidedBy, String note) {
+        var loan = banking.findLoanById(loanId)
+                .orElseThrow(() -> new DomainException(ErrorCode.CONTA_NAO_ENCONTRADA,
+                        "Contrato não encontrado."));
+        if (!loan.isUnderReview()) {
+            throw new DomainException(ErrorCode.EMPRESTIMO_JA_DECIDIDO);
+        }
+        banking.decideLoan(loanId, Loan.LoanState.RECUSADO, decidedBy, note);
+        banking.notify(loan.userId(), "transaction", "Empréstimo recusado",
+                note == null || note.isBlank() ? "Seu pedido não foi aprovado."
+                        : "Seu pedido não foi aprovado: " + note);
+        return banking.findLoanById(loanId).orElseThrow();
+    }
+
+    /** Cria o contrato EM_ANALISE, com parcelas calculadas mas sem dívida. */
+    @Transactional
+    public Loan createPending(UUID userId, Money principal, int months) {
         if (months < 1 || months > 48) {
             throw new DomainException(ErrorCode.VALOR_NAO_POSITIVO,
                     "Escolha entre 1 e 48 parcelas.");
@@ -89,19 +124,26 @@ public class LoanService {
             installments.add(new Installment(UUID.randomUUID(), null, n, payment,
                     today.plusMonths(n), null));
         }
-
         var loan = new Loan(UUID.randomUUID(), userId, liabilityAccount, principal,
-                MONTHLY_RATE, months, installments, clock.instant());
+                MONTHLY_RATE, months, Loan.LoanState.EM_ANALISE, installments, clock.instant());
         banking.saveLoan(loan);
+        return loan;
+    }
 
-        // Reconhece a dívida no passivo. A contraparte é o funding: o banco
-        // "adiantou" o valor (no empréstimo, para a conta; no parcelamento,
-        // para quitar a fatura). Nenhum dinheiro toca a conta corrente aqui.
+    /**
+     * Parcelamento de fatura: cria a dívida JÁ ATIVA e sem análise — a fatura
+     * já foi movida do cartão, então é só reconhecer o parcelado. Não passa
+     * pela esteira de aprovação, que é para empréstimo novo.
+     */
+    @Transactional
+    public Loan openContractActive(UUID userId, Money principal, int months) {
+        var loan = createPending(userId, principal, months);
+        var payment = loan.installments().get(0).amount();
         mover.move(new MoneyMover.Transfer(
-                userId, liabilityAccount, banking.fundingAccount(),
+                userId, loan.liabilityAccountId(), banking.fundingAccount(),
                 payment.times(months), "EMPRESTIMO_DIVIDA", "Dívida contratada",
                 "Saldo devedor", TxCategory.credito, TxMethod.emprestimo, false, null));
-
+        banking.decideLoan(loan.id(), Loan.LoanState.ACTIVE, "sistema", "parcelamento de fatura");
         return loan;
     }
 

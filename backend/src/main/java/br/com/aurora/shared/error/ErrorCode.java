@@ -84,6 +84,7 @@ public enum ErrorCode {
         "Compra acima do limite disponível do cartão."),
 
     // Investimentos
+    EMPRESTIMO_JA_DECIDIDO(HttpStatus.CONFLICT, "Este empréstimo já foi aprovado ou recusado."),
     SEM_RENDIMENTO(HttpStatus.UNPROCESSABLE_ENTITY,
         "Esta posição ainda não tem rendimento para aplicar."),
 
