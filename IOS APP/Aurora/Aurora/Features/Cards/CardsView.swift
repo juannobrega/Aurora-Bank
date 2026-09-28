@@ -52,7 +52,7 @@ struct CardsView: View {
                 .fill(
                     model.card.kind == .virtual
                         ? AnyShapeStyle(LinearGradient(
-                            colors: [Theme.Spectrum.violet.opacity(0.55), Color(hex: 0x13206E)],
+                            colors: [Color(hex: 0x2C3444), Color(hex: 0x181C24)],
                             startPoint: .topLeading, endPoint: .bottomTrailing))
                         : AnyShapeStyle(Theme.cardGradient)
                 )

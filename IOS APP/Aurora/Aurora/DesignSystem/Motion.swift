@@ -130,23 +130,13 @@ struct AnimatedMoney: View {
     var font: Font = .auroraValue
     var hidden = false
 
-    @State private var shown: Decimal = 0
-
+    // Sem contador subindo — bancos mostram o valor de imediato. O nome fica
+    // por compatibilidade com os locais que já chamam.
     var body: some View {
-        Text(hidden ? "••••" : Money(shown).formatted)
+        Text(value.formatted(hidden: hidden))
             .font(font)
             .foregroundStyle(Theme.text)
             .monospacedDigit()
-            .contentTransition(.numericText())
-            .onAppear { animate(to: value.amount) }
-            .onChange(of: value) { _, new in animate(to: new.amount) }
-            .onChange(of: hidden) { _, _ in shown = value.amount }
-    }
-
-    private func animate(to target: Decimal) {
-        guard !hidden else { shown = target; return }
-        shown = 0
-        withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 1.1)) { shown = target }
     }
 }
 

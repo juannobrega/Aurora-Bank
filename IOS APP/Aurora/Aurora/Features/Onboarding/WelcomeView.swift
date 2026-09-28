@@ -15,7 +15,7 @@ struct WelcomeView: View {
                     .transition(.opacity)
             }
         }
-        .auroraBackground(horizon: true)
+        .auroraBackground()
         .fullScreenCover(isPresented: $showOnboarding) { OnboardingView() }
         .fullScreenCover(isPresented: $showSignIn) {
             NavigationStack { SignInView() }

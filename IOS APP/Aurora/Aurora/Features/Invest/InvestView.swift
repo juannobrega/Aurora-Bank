@@ -84,8 +84,8 @@ struct InvestView: View {
         VStack(spacing: 0) {
             HStack(spacing: 13) {
                 Circle()
-                    .fill(Theme.Spectrum.named( h.product.accent))
-                    .frame(width: 10, height: 10)
+                    .fill(Theme.text3)
+                    .frame(width: 8, height: 8)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(h.product.name).font(.auroraBody).foregroundStyle(Theme.text)
                         .lineLimit(1)
@@ -127,7 +127,7 @@ struct InvestView: View {
                             VStack(spacing: 0) {
                                 HStack(spacing: 13) {
                                     Circle()
-                                        .fill(Theme.Spectrum.named( p.accent))
+                                        .fill(Theme.text3)
                                         .frame(width: 10, height: 10)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(p.name).font(.auroraBody).foregroundStyle(Theme.text)

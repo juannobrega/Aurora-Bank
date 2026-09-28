@@ -130,9 +130,9 @@ struct PlanView: View {
         VStack(spacing: 0) {
             HStack(spacing: 13) {
                 Image(systemName: item.category.symbol)
-                    .font(.system(size: 14)).foregroundStyle(item.category.tint)
+                    .font(.system(size: 14)).foregroundStyle(Theme.text2)
                     .frame(width: 36, height: 36)
-                    .background(item.category.tint.tinted,
+                    .background(Theme.surface2,
                                 in: .rect(cornerRadius: Theme.Radius.icon))
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
@@ -141,7 +141,7 @@ struct PlanView: View {
                         Text(item.total.formatted(hidden: model.hideBalance))
                             .font(.auroraAmount).foregroundStyle(Theme.text)
                     }
-                    ProgressBar(value: item.ratio, color: item.category.tint, height: 5)
+                    ProgressBar(value: item.ratio, color: Theme.text3, height: 5)
                 }
             }
             .padding(.vertical, 10)

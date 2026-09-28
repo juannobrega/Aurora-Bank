@@ -54,9 +54,9 @@ struct CreditView: View {
         let selected = p.id == product.id
         return HStack(spacing: 13) {
             Image(systemName: p.symbol)
-                .font(.system(size: 16)).foregroundStyle(p.tint)
+                .font(.system(size: 16)).foregroundStyle(Theme.text2)
                 .frame(width: 44, height: 44)
-                .background(p.tint.tinted, in: .rect(cornerRadius: Theme.Radius.icon))
+                .background(Theme.surface2, in: .rect(cornerRadius: Theme.Radius.icon))
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.name).font(.auroraBody).foregroundStyle(Theme.text)
                 Text(p.rateLabel + " · até " + String(p.maxMonths) + "x")
@@ -65,12 +65,12 @@ struct CreditView: View {
             Spacer(minLength: 8)
             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20))
-                .foregroundStyle(selected ? Theme.cyan : Theme.text3)
+                .foregroundStyle(selected ? Theme.blue : Theme.text3)
         }
         .padding(14)
         .background(Theme.surface1, in: .rect(cornerRadius: Theme.Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
-            .stroke(selected ? Theme.cyan : Theme.line, lineWidth: selected ? 1.5 : 1))
+            .stroke(selected ? Theme.blue : Theme.line, lineWidth: selected ? 1.5 : 1))
     }
 
     /// Opções de prazo até o máximo do produto.
@@ -172,7 +172,7 @@ struct CreditView: View {
                         .font(.mono(26, .semibold)).foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
                     Slider(value: $principal, in: minAmt...maxAmt,
-                           step: minAmt >= 1000 ? 1000 : 500).tint(product.tint)
+                           step: minAmt >= 1000 ? 1000 : 500).tint(Theme.blue)
                     Text("De \(product.minAmount.formatted) a \(product.maxAmount.formatted)")
                         .font(.auroraCaption).foregroundStyle(Theme.text3)
                 }
@@ -189,9 +189,9 @@ struct CreditView: View {
                                     .font(.auroraLabel)
                                     .foregroundStyle(on ? .white : Theme.text)
                                     .frame(maxWidth: .infinity).frame(height: 40)
-                                    .background(on ? product.tint : .clear, in: .rect(cornerRadius: 10))
+                                    .background(on ? Theme.blue : .clear, in: .rect(cornerRadius: 10))
                                     .overlay(RoundedRectangle(cornerRadius: 10)
-                                        .stroke(on ? product.tint : Theme.line, lineWidth: 1))
+                                        .stroke(on ? Theme.blue : Theme.line, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                         }
