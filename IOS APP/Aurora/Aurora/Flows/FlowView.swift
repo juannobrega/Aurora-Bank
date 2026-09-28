@@ -220,12 +220,17 @@ struct FlowView: View {
                 do {
                     let (title, subtitle) = try await model.runRemoteFlow(
                         session.flow, entered: session.entered)
-                    // O comprovante usa a transação local só para código/data;
-                    // título e subtítulo vêm da resposta da API.
-                    var result = session.flow.commit(entered: session.entered, model: model)
-                    result = FlowResult(transaction: result.transaction,
-                                        doneTitle: title, doneSubtitle: subtitle)
-                    session.result = result
+                    // NÃO chama o commit local: ele mutaria o estado (creditar
+                    // saldo, criar cofrinho) por cima do que a API já aplicou —
+                    // foi o que fazia o empréstimo aparecer na conta antes da
+                    // aprovação. O comprovante usa uma transação sintética só
+                    // para código e data; os valores reais vieram do reload.
+                    let synthetic = Transaction(
+                        title: title, counterparty: subtitle,
+                        amount: session.flow.displayAmount(entered: session.entered),
+                        category: .outros, method: .pix)
+                    session.result = FlowResult(transaction: synthetic,
+                        doneTitle: title, doneSubtitle: subtitle)
                     committing = false
                     Haptics.success()
                     session.advance()
