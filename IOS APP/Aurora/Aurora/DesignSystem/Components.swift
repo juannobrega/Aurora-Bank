@@ -252,7 +252,7 @@ struct ActionRowLabel: View {
     let symbol: String
     let title: String
     var subtitle: String?
-    var tint: Color = Theme.Spectrum.sky
+    var tint: Color = Theme.text2
     var showsDivider = true
 
     var body: some View {
@@ -287,7 +287,7 @@ struct ActionRow: View {
     let symbol: String
     let title: String
     var subtitle: String?
-    var tint: Color = Theme.Spectrum.sky
+    var tint: Color = Theme.text2
     var showsDivider = true
     var action: () -> Void
 

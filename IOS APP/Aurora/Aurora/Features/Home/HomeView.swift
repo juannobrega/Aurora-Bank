@@ -22,7 +22,7 @@ struct HomeView: View {
             .padding(.bottom, Theme.Space.lg)
         }
         .refreshable { await model.load() }
-        .auroraBackground(horizon: true)
+        .auroraBackground()
         .auroraRoutes()
         .navigationBarHidden(true)
         .flowSheet($activeFlow)
@@ -85,24 +85,17 @@ struct HomeView: View {
                 HStack {
                     Text("Saldo disponível").font(.auroraCaption).foregroundStyle(Theme.text2)
                     Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
-                        Text("100% do CDI").font(.display(12, .medium))
-                    }
-                    .foregroundStyle(Theme.cyan)
-                    .padding(.horizontal, 9)
-                    .frame(height: 24)
-                    .background(Theme.cyan.tinted, in: .capsule)
+                    Text("Rende 100% do CDI")
+                        .font(.auroraCaption).foregroundStyle(Theme.text2)
                 }
 
                 if model.isLoading && model.ledger.transactions.isEmpty {
-                    SkeletonRows(count: 1).frame(height: 44)
+                    SkeletonRows(count: 1).frame(height: 40)
                 } else {
-                    AnimatedMoney(value: model.balance, hidden: model.hideBalance)
+                    Text(model.balance.formatted(hidden: model.hideBalance))
+                        .font(.auroraValue).foregroundStyle(Theme.text)
+                        .monospacedDigit()
                 }
-
-                Sparkline(values: balanceTrend)
-                    .padding(.top, 2)
             }
         }
         .accessibilityElement(children: .combine)
@@ -165,41 +158,38 @@ struct HomeView: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
                   spacing: Theme.Space.base) {
             NavigationLink(value: Route.payments) {
-                shortcut("barcode.viewfinder", "Pagar", Theme.Spectrum.amber)
+                shortcut("barcode.viewfinder", "Pagar")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.invest) {
-                shortcut("chart.line.uptrend.xyaxis", "Investir", Theme.Spectrum.lime)
+                shortcut("chart.line.uptrend.xyaxis", "Investir")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.credit) {
-                shortcut("hand.raised.fill", "Crédito", Theme.Spectrum.violet)
+                shortcut("creditcard.and.123", "Crédito")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.plan(.goals)) {
-                shortcut("banknote.fill", "Cofrinhos", Theme.Spectrum.pink)
+                shortcut("target", "Cofrinhos")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.plan(.spending)) {
-                shortcut("chart.pie.fill", "Gastos", Theme.Spectrum.coral)
+                shortcut("chart.pie", "Gastos")
             }.buttonStyle(.plain)
             Button { router.select(.statement) } label: {
-                shortcut("list.bullet.rectangle", "Extrato", Theme.Spectrum.sky)
+                shortcut("list.bullet.rectangle", "Extrato")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.security) {
-                shortcut("shield.fill", "Segurança", Theme.Spectrum.ice)
+                shortcut("lock.shield", "Segurança")
             }.buttonStyle(.plain)
             NavigationLink(value: Route.support) {
-                shortcut("bubble.left.and.text.bubble.right.fill", "Ajuda", Theme.Spectrum.cyan)
+                shortcut("questionmark.circle", "Ajuda")
             }.buttonStyle(.plain)
         }
     }
-
-    private func shortcut(_ symbol: String, _ label: String, _ tint: Color) -> some View {
-        VStack(spacing: 7) {
+    private func shortcut(_ symbol: String, _ label: String) -> some View {
+        VStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 18))
-                .foregroundStyle(tint)
-                .frame(width: 56, height: 56)
-                .background(Theme.surface1, in: .rect(cornerRadius: Theme.Radius.tile))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.tile)
-                    .stroke(Theme.line, lineWidth: 1))
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(Theme.text)
+                .frame(width: 52, height: 52)
+                .background(Theme.surface2, in: .rect(cornerRadius: Theme.Radius.tile))
             Text(label)
                 .font(.auroraCaption).foregroundStyle(Theme.text2)
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -217,9 +207,9 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         Image(systemName: "creditcard.fill")
-                            .font(.system(size: 14)).foregroundStyle(Theme.Spectrum.violet)
+                            .font(.system(size: 14)).foregroundStyle(Theme.text2)
                             .frame(width: 34, height: 34)
-                            .background(Theme.Spectrum.violet.tinted,
+                            .background(Theme.surface2,
                                         in: .rect(cornerRadius: Theme.Radius.icon))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Fatura atual").font(.auroraBody).foregroundStyle(Theme.text)
@@ -322,17 +312,14 @@ struct TransactionRow: View {
     var hidden: Bool
     var showsDivider = true
 
-    /// Cada categoria tem seu tom do espectro, com fundo tingido a 10%.
-    private var tint: Color { transaction.category.tint }
-
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 13) {
                 Image(systemName: transaction.category.symbol)
                     .font(.system(size: 15))
-                    .foregroundStyle(tint)
-                    .frame(width: 40, height: 40)
-                    .background(tint.tinted, in: .rect(cornerRadius: Theme.Radius.icon))
+                    .foregroundStyle(Theme.text2)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.surface2, in: .rect(cornerRadius: Theme.Radius.icon))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(transaction.title)
                         .font(.auroraBody).foregroundStyle(Theme.text).lineLimit(1)

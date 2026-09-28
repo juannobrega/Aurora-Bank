@@ -10,51 +10,51 @@ enum Theme {
 
     // MARK: Marca — azul para ação, ciano só para positivo e foco
 
-    /// `--au-navy` — fundo da aplicação.
-    static let navy    = Color(hex: 0x070B1E)
-    /// `--au-blue` — cor de ação primária.
-    static let blue    = Color(hex: 0x2447F5)
-    /// `--au-sky` — meio do gradiente da marca; também `--au-info`.
-    static let sky     = Color(hex: 0x2E8BFF)
-    /// `--au-cyan` — fim do gradiente; também `--au-positive`.
-    static let cyan    = Color(hex: 0x25E2D6)
+    /// Fundo da aplicação — quase preto azulado, sóbrio.
+    static let navy    = Color(hex: 0x0B0E14)
+    /// Cor de ação primária — azul institucional, não vibrante.
+    static let blue    = Color(hex: 0x2D5BD6)
+    /// Azul de apoio (links, foco).
+    static let sky     = Color(hex: 0x4B7BE5)
+    /// Acento pontual (positivo, destaque) — verde-azulado discreto.
+    static let cyan    = Color(hex: 0x3BA88F)
 
     // MARK: Neutros — superfícies em camadas e texto
 
-    /// `--au-surface-1` — cartões e barra flutuante.
-    static let surface1 = Color(hex: 0x0F1530)
-    /// `--au-surface-2` — superfície elevada, base do shimmer.
-    static let surface2 = Color(hex: 0x161E42)
-    /// `--au-surface-3` — controles e segmentos ativos.
-    static let surface3 = Color(hex: 0x222B5A)
-    /// Linha divisória e bordas de cartão.
-    static let line     = Color(hex: 0x1A2250)
+    /// Cartões e barra — cinza-azulado escuro, pouca saturação.
+    static let surface1 = Color(hex: 0x141821)
+    /// Superfície elevada.
+    static let surface2 = Color(hex: 0x1C212C)
+    /// Controles e segmentos ativos.
+    static let surface3 = Color(hex: 0x2A303D)
+    /// Linha divisória e bordas — sutil.
+    static let line     = Color(hex: 0x252A36)
 
-    /// `--au-text` — texto primário.
-    static let text  = Color(hex: 0xF2F4FF)
-    /// `--au-text-2` — texto secundário.
-    static let text2 = Color(hex: 0x9AA3DB)
-    /// `--au-text-3` — texto terciário e placeholders.
-    static let text3 = Color(hex: 0x5C66A3)
+    /// Texto primário — branco levemente quente, não puro.
+    static let text  = Color(hex: 0xEDEFF3)
+    /// Texto secundário — cinza neutro.
+    static let text2 = Color(hex: 0x9BA1AD)
+    /// Texto terciário e placeholders.
+    static let text3 = Color(hex: 0x616773)
 
-    // MARK: Semânticas
+    // MARK: Semânticas — cores de estado, sóbrias
 
-    static let positive = cyan
-    static let danger   = Color(hex: 0xFF6B81)
-    static let warning  = Color(hex: 0xFFB547)
+    static let positive = Color(hex: 0x4CAF82)
+    static let danger   = Color(hex: 0xE05260)
+    static let warning  = Color(hex: 0xD9A03C)
     static let info     = sky
 
     // MARK: Espectro — SÓ em dados: categorias, metas e gráficos
 
     enum Spectrum {
-        static let cyan   = Color(hex: 0x3CCFC4)
-        static let sky    = Color(hex: 0x4C8DF6)
-        static let violet = Color(hex: 0x8C86E8)
-        static let pink   = Color(hex: 0xD98AB0)
-        static let amber  = Color(hex: 0xE3AE5B)
-        static let lime   = Color(hex: 0x8CCB7A)
-        static let coral  = Color(hex: 0xE08A72)
-        static let ice    = Color(hex: 0x8FA7E0)
+        static let cyan   = Color(hex: 0x3BA88F)
+        static let sky    = Color(hex: 0x4B7BE5)
+        static let violet = Color(hex: 0x7C74C4)
+        static let pink   = Color(hex: 0xC07A9C)
+        static let amber  = Color(hex: 0xC79A45)
+        static let lime   = Color(hex: 0x6FA85E)
+        static let coral  = Color(hex: 0xC77A64)
+        static let ice    = Color(hex: 0x7E8BA6)
 
         static let all: [Color] = [cyan, sky, violet, pink, amber, lime, coral, ice]
 
@@ -72,37 +72,31 @@ enum Theme {
         }
     }
 
-    // MARK: Gradientes
+    // MARK: Superfícies de destaque
+    //
+    // Sem gradiente vibrante — bancos sérios usam cor chapada. O "gradiente"
+    // da marca é só o azul institucional sólido; o cartão ganha um degradê
+    // discreto para dar profundidade sem parecer demo.
 
-    /// Gradiente da marca: azul → céu → ciano.
-    static let brandGradient = LinearGradient(
-        stops: [
-            .init(color: blue, location: 0),
-            .init(color: sky, location: 0.55),
-            .init(color: cyan, location: 1),
-        ],
-        startPoint: .leading, endPoint: .trailing
-    )
+    static let brandGradient = LinearGradient(colors: [blue, blue],
+        startPoint: .leading, endPoint: .trailing)
 
-    /// `--au-grad-card` — face do cartão.
+    static let actionGradient = LinearGradient(colors: [blue, blue],
+        startPoint: .leading, endPoint: .trailing)
+
+    /// Face do cartão: degradê sóbrio, tons de grafite/azul profundo.
     static let cardGradient = LinearGradient(
-        colors: [Color(hex: 0x1F3BD6), Color(hex: 0x13206E)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-
-    /// Gradiente de ação para botões primários.
-    static let actionGradient = LinearGradient(
-        colors: [blue, Color(hex: 0x1F3BD6)],
+        colors: [Color(hex: 0x232A3A), Color(hex: 0x14181F)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
     // MARK: Raios
 
     enum Radius {
-        static let icon: CGFloat = 14
-        static let tile: CGFloat = 20
-        static let card: CGFloat = 24
-        static let hero: CGFloat = 28
+        static let icon: CGFloat = 10
+        static let tile: CGFloat = 12
+        static let card: CGFloat = 14
+        static let hero: CGFloat = 16
         static let pill: CGFloat = 999
     }
 
